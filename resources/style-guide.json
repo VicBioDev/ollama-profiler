@@ -1,0 +1,61 @@
+{
+  "source": {
+    "projectId": "1215570123286233356",
+    "screenId": "c774d03390b745d39fb119484caef798",
+    "syncedAt": "2026-07-25T15:25:47Z"
+  },
+  "theme": {
+    "colors": {
+      "background": "#0b0d10",
+      "panel": "#111419",
+      "panelStrong": "#151920",
+      "panelBright": "#1a1f27",
+      "panelSoft": "#0e1115",
+      "border": "#252b34",
+      "borderSoft": "#1e242c",
+      "text": "#f2f4f7",
+      "textSoft": "#bdc4cf",
+      "muted": "#747e8e",
+      "accent": "#b8f44a",
+      "success": "#69e8ae",
+      "warning": "#ffce6b",
+      "error": "#ff7d86"
+    },
+    "typography": {
+      "sans": [
+        "Inter",
+        "ui-sans-serif",
+        "-apple-system",
+        "BlinkMacSystemFont",
+        "Segoe UI",
+        "sans-serif"
+      ],
+      "mono": [
+        "SFMono-Regular",
+        "Cascadia Code",
+        "Consolas",
+        "monospace"
+      ],
+      "sizes": {
+        "eyebrow": "10px",
+        "body": "14px",
+        "panelTitle": "19px",
+        "metric": "28px",
+        "pageTitle": "clamp(38px, 4vw, 62px)"
+      }
+    },
+    "spacing": {
+      "unit": "4px",
+      "sidebarWidth": "216px",
+      "toolbarHeight": "58px",
+      "pageGutter": "clamp(28px, 4vw, 64px)",
+      "panelPadding": "24px"
+    },
+    "borderRadius": {
+      "control": "8px",
+      "panel": "11px",
+      "large": "12px",
+      "pill": "999px"
+    }
+  }
+}

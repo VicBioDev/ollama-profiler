@@ -1,0 +1,25 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1024 1024"
+  role="img"
+  aria-labelledby="title description"
+>
+  <title id="title">Ollama Profiler</title>
+  <desc id="description">A dark performance gauge on an electric green rounded square.</desc>
+  <rect width="1024" height="1024" rx="224" fill="#b8f44a"/>
+  <path
+    d="M246 665a295 295 0 1 1 532 0"
+    fill="none"
+    stroke="#10140c"
+    stroke-width="78"
+    stroke-linecap="round"
+  />
+  <path
+    d="m512 553 154-154"
+    fill="none"
+    stroke="#10140c"
+    stroke-width="70"
+    stroke-linecap="round"
+  />
+  <circle cx="512" cy="553" r="48" fill="#10140c"/>
+</svg>
