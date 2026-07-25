@@ -62,6 +62,27 @@ describe('automatic application version', () => {
     })
   })
 
+  it('ad-hoc signs complete macOS bundles when release credentials are absent', async () => {
+    const packageScript = await readFile(
+      resolve(projectRoot, 'scripts/package.cjs'),
+      'utf8'
+    )
+    const entitlements = await readFile(
+      resolve(projectRoot, 'build/entitlements.mac.plist'),
+      'utf8'
+    )
+
+    expect(packageScript).toContain("'--config.mac.identity=-'")
+    expect(packageScript).toContain('CSC_LINK')
+    expect(packageScript).toContain('CSC_IDENTITY_AUTO_DISCOVERY')
+    expect(packageScript).toContain("'--config.mac.notarize=true'")
+    expect(packageScript).toContain('APPLE_APP_SPECIFIC_PASSWORD')
+    expect(entitlements).toContain('com.apple.security.cs.allow-jit')
+    expect(entitlements).toContain(
+      'com.apple.security.cs.disable-library-validation'
+    )
+  })
+
   it('publishes each successful main build without a manual tag push', async () => {
     const workflow = await readFile(
       resolve(projectRoot, '.github/workflows/build.yml'),

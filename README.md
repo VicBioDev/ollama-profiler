@@ -100,8 +100,21 @@ Intel、Windows x64 和 Linux x64 上并行生成未签名安装包。四个平�
 工作流会自动为当前 commit 创建匹配版本（例如 `v0.1.37`）的标签和 GitHub Release，
 并上传所有安装包；不需要手动创建 tag。Pull Request 只运行检查，不发布 Release。
 
-macOS 和 Windows 安装包目前未做代码签名，系统可能显示未知开发者提示；后续可通过
-GitHub Secrets 加入签名证书。
+没有配置 Apple Developer 证书时，macOS 安装包会使用完整的 ad-hoc 签名。首次打开
+仍可能被 Gatekeeper 阻止；确认文件来自本仓库后，可在“系统设置 → 隐私与安全性”
+中选择“仍要打开”。完全消除警告需要 Apple Developer Program 的 Developer ID
+签名和 notarization。
+
+配置以下 GitHub Secrets 后，同一工作流会自动改用 Developer ID 签名并提交 Apple
+notarization：
+
+- `MAC_CSC_LINK`：Developer ID Application `.p12` 的 Base64 内容
+- `MAC_CSC_KEY_PASSWORD`：证书导出密码
+- `APPLE_ID`：Apple Developer 账号
+- `APPLE_APP_SPECIFIC_PASSWORD`：Apple ID 专用密码
+- `APPLE_TEAM_ID`：10 位 Team ID
+
+Windows 安装包目前也未做 Authenticode 签名，SmartScreen 可能显示未知发布者。
 
 可编辑的主图标位于 `build/icon.svg`，打包使用同目录下生成的 PNG 和 ICO。
 
