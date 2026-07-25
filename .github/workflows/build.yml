@@ -101,10 +101,11 @@ jobs:
         shell: bash
         run: |
           tag="v${{ needs.test.outputs.version }}"
-          if gh release view "$tag" >/dev/null 2>&1; then
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; nothing to publish."
           else
             gh release create "$tag" release-assets/* \
+              -R "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "Ollama Profiler $tag" \
               --generate-notes

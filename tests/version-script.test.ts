@@ -71,6 +71,7 @@ describe('automatic application version', () => {
     expect(workflow).toContain("github.ref == 'refs/heads/main'")
     expect(workflow).toContain('tag="v${{ needs.test.outputs.version }}"')
     expect(workflow).toContain('gh release create "$tag"')
+    expect(workflow).toContain('-R "$GITHUB_REPOSITORY"')
     expect(workflow).toContain('--target "$GITHUB_SHA"')
     expect(workflow).not.toContain('tags:')
   })
