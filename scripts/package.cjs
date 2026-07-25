@@ -29,6 +29,20 @@ const macNotarizationArgs =
   hasMacNotarizationCredentials
     ? ['--config.mac.notarize=true']
     : []
+const packagingEnvironment = { ...process.env }
+for (const variable of [
+  'CSC_LINK',
+  'CSC_KEY_PASSWORD',
+  'CSC_NAME',
+  'CSC_KEYCHAIN',
+  'APPLE_ID',
+  'APPLE_APP_SPECIFIC_PASSWORD',
+  'APPLE_TEAM_ID'
+]) {
+  if (!packagingEnvironment[variable]?.trim()) {
+    delete packagingEnvironment[variable]
+  }
+}
 const result = spawnSync(
   process.execPath,
   [
@@ -43,7 +57,7 @@ const result = spawnSync(
   {
     cwd: projectRoot,
     env: {
-      ...process.env,
+      ...packagingEnvironment,
       CSC_IDENTITY_AUTO_DISCOVERY:
         process.env.CSC_IDENTITY_AUTO_DISCOVERY ?? 'false',
       OLLAMA_PROFILER_VERSION: version

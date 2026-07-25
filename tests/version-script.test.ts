@@ -77,6 +77,7 @@ describe('automatic application version', () => {
     expect(packageScript).toContain('CSC_IDENTITY_AUTO_DISCOVERY')
     expect(packageScript).toContain("'--config.mac.notarize=true'")
     expect(packageScript).toContain('APPLE_APP_SPECIFIC_PASSWORD')
+    expect(packageScript).toContain('delete packagingEnvironment[variable]')
     expect(entitlements).toContain('com.apple.security.cs.allow-jit')
     expect(entitlements).toContain(
       'com.apple.security.cs.disable-library-validation'
