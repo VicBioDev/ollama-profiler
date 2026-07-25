@@ -2,7 +2,10 @@
   "name": "ollama-profiler",
   "version": "0.1.0",
   "description": "Cross-platform desktop profiler for fleets of Ollama servers",
-  "author": "Ollama Profiler contributors",
+  "author": {
+    "name": "VicBioDev",
+    "email": "VicBioDev@users.noreply.github.com"
+  },
   "license": "MIT",
   "main": "out/main/index.js",
   "type": "module",

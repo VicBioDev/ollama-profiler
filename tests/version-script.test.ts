@@ -51,6 +51,17 @@ describe('automatic application version', () => {
     expect(svg).not.toContain('data:image/')
   })
 
+  it('provides the maintainer metadata required by Linux packages', async () => {
+    const packageJson = JSON.parse(
+      await readFile(resolve(projectRoot, 'package.json'), 'utf8')
+    )
+
+    expect(packageJson.author).toEqual({
+      name: 'VicBioDev',
+      email: 'VicBioDev@users.noreply.github.com'
+    })
+  })
+
   it('publishes each successful main build without a manual tag push', async () => {
     const workflow = await readFile(
       resolve(projectRoot, '.github/workflows/build.yml'),
