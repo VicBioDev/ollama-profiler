@@ -95,20 +95,13 @@ npm run dist
 npm run version:current
 ```
 
-推送到 `main` 时，GitHub Actions 会在 macOS Apple Silicon、macOS Intel、Windows
-x64 和 Linux x64 上并行生成未签名安装包，并作为工作流 Artifact 保留 14 天。
+推送到 `main` 时，GitHub Actions 会先运行检查，再在 macOS Apple Silicon、macOS
+Intel、Windows x64 和 Linux x64 上并行生成未签名安装包。四个平台全部成功后，
+工作流会自动为当前 commit 创建匹配版本（例如 `v0.1.37`）的标签和 GitHub Release，
+并上传所有安装包；不需要手动创建 tag。Pull Request 只运行检查，不发布 Release。
 
-要创建永久 GitHub Release，先查看当前版本，再推送完全匹配的标签：
-
-```bash
-npm run version:current
-git tag v0.1.37
-git push origin main v0.1.37
-```
-
-标签必须等于生成版本，例如 `v0.1.37`，否则工作流会停止发布。macOS 和 Windows
-安装包目前未做代码签名，系统可能显示未知开发者提示；后续可通过 GitHub Secrets
-加入签名证书。
+macOS 和 Windows 安装包目前未做代码签名，系统可能显示未知开发者提示；后续可通过
+GitHub Secrets 加入签名证书。
 
 可编辑的主图标位于 `build/icon.svg`，打包使用同目录下生成的 PNG 和 ICO。
 

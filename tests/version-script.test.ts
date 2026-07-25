@@ -50,4 +50,17 @@ describe('automatic application version', () => {
     expect(svg).toContain('fill="#b8f44a"')
     expect(svg).not.toContain('data:image/')
   })
+
+  it('publishes each successful main build without a manual tag push', async () => {
+    const workflow = await readFile(
+      resolve(projectRoot, '.github/workflows/build.yml'),
+      'utf8'
+    )
+
+    expect(workflow).toContain("github.ref == 'refs/heads/main'")
+    expect(workflow).toContain('tag="v${{ needs.test.outputs.version }}"')
+    expect(workflow).toContain('gh release create "$tag"')
+    expect(workflow).toContain('--target "$GITHUB_SHA"')
+    expect(workflow).not.toContain('tags:')
+  })
 })

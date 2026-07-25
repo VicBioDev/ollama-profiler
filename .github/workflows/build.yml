@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
 
 permissions:
   contents: read
@@ -28,9 +26,6 @@ jobs:
       - id: version
         name: Resolve A.B.commit-count version
         run: echo "value=$(node scripts/version.cjs)" >> "$GITHUB_OUTPUT"
-      - name: Verify release tag matches generated version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: node scripts/version.cjs --check-tag "$GITHUB_REF_NAME"
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -88,7 +83,7 @@ jobs:
             release/*.blockmap
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - test
       - package
@@ -103,6 +98,16 @@ jobs:
           merge-multiple: true
           path: release-assets
       - name: Publish GitHub release
-        run: gh release create "$GITHUB_REF_NAME" release-assets/* --generate-notes --verify-tag
+        shell: bash
+        run: |
+          tag="v${{ needs.test.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; nothing to publish."
+          else
+            gh release create "$tag" release-assets/* \
+              --target "$GITHUB_SHA" \
+              --title "Ollama Profiler $tag" \
+              --generate-notes
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
