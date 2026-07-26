@@ -231,6 +231,18 @@ code,
   align-items: flex-start;
   padding: 0 9px 3px;
   margin-top: auto;
+}
+
+.sidebar-version-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sidebar-current-version,
+.sidebar-update-version {
+  position: relative;
+  padding: 0;
   color: #626c7b;
   text-align: left;
   background: transparent;
@@ -241,13 +253,50 @@ code,
   user-select: none;
 }
 
-.sidebar-version:hover {
+.sidebar-current-version:hover,
+.sidebar-update-version:hover {
   color: var(--text);
 }
 
-.sidebar-version:disabled {
+.sidebar-current-version:disabled,
+.sidebar-update-version:disabled {
   cursor: progress;
   opacity: 0.82;
+}
+
+.sidebar-update-version {
+  color: var(--yellow);
+}
+
+.sidebar-version-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  max-width: 180px;
+  padding: 7px 9px;
+  color: var(--text);
+  pointer-events: none;
+  visibility: hidden;
+  background: var(--panel-bright);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  font: 11px/1.3 -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: normal;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  transform: translateY(3px);
+}
+
+.sidebar-current-version:hover .sidebar-version-tooltip,
+.sidebar-current-version:focus-visible .sidebar-version-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .sidebar-version small {
@@ -262,10 +311,6 @@ code,
 
 .sidebar-version.current small {
   color: var(--green);
-}
-
-.sidebar-version.available small {
-  color: var(--yellow);
 }
 
 .sidebar-version.error small {

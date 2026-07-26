@@ -30,6 +30,11 @@ export function Sidebar({
     : NAV_ITEMS.filter(
         (item) => item.id !== 'servers' && item.id !== 'chat'
       )
+  const updaterBusy =
+    updateState?.phase === 'checking' ||
+    updateState?.phase === 'downloading' ||
+    updateState?.phase === 'installing' ||
+    updateState?.phase === 'restarting'
   return (
     <aside className="sidebar" data-tauri-drag-region="deep">
       <div className="brand">
@@ -67,27 +72,41 @@ export function Sidebar({
           )
         })}
       </nav>
-      <button
-        aria-label={`Version ${APP_VERSION}. ${updateState?.label ?? 'Check for updates'}`}
+      <div
         className={`sidebar-version ${updateState?.phase ?? 'idle'}`}
         data-tauri-drag-region="false"
-        disabled={
-          updateState?.phase === 'checking' ||
-          updateState?.phase === 'downloading' ||
-          updateState?.phase === 'installing' ||
-          updateState?.phase === 'restarting'
-        }
-        onClick={
-          updateState?.phase === 'available' ? onInstallUpdate : onCheckForUpdates
-        }
-        title={updateState?.detail ?? 'Click to check for updates'}
-        type="button"
       >
-        <span>v{APP_VERSION}</span>
-        {updateState && updateState.phase !== 'idle' ? (
+        <div className="sidebar-version-row">
+          <button
+            aria-label={`Version ${APP_VERSION}. Check for updates`}
+            className="sidebar-current-version"
+            disabled={updaterBusy}
+            onClick={onCheckForUpdates}
+            type="button"
+          >
+            <span>v{APP_VERSION}</span>
+            <span className="sidebar-version-tooltip" role="tooltip">
+              Click to check for updates
+            </span>
+          </button>
+          {updateState?.phase === 'available' && updateState.version ? (
+            <button
+              aria-label={`Install update v${updateState.version}`}
+              className="sidebar-update-version"
+              onClick={onInstallUpdate}
+              title={`Click to install v${updateState.version}`}
+              type="button"
+            >
+              → v{updateState.version}
+            </button>
+          ) : null}
+        </div>
+        {updateState &&
+        updateState.phase !== 'idle' &&
+        updateState.phase !== 'available' ? (
           <small>{updateState.label}</small>
         ) : null}
-      </button>
+      </div>
     </aside>
   )
 }

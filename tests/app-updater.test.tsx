@@ -3,6 +3,7 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Sidebar } from '@renderer/components/Sidebar.js'
 import { useAppUpdater } from '@renderer/hooks/useAppUpdater.js'
 
 const { checkMock, relaunchMock } = vi.hoisted(() => ({
@@ -37,7 +38,7 @@ afterEach(() => {
 })
 
 describe('application updater', () => {
-  it('checks first and only installs after a separate action', async () => {
+  it('checks on launch and only installs after a separate action', async () => {
     const downloadAndInstall = vi.fn(async () => undefined)
     checkMock.mockResolvedValue({
       version: '0.2.0',
@@ -48,16 +49,14 @@ describe('application updater', () => {
       root.render(<Harness />)
     })
 
-    await act(async () => {
-      await updater.checkForUpdates()
-    })
-
     expect(checkMock).toHaveBeenCalledWith({ timeout: 20_000 })
+    expect(checkMock).toHaveBeenCalledTimes(1)
     expect(downloadAndInstall).not.toHaveBeenCalled()
     expect(relaunchMock).not.toHaveBeenCalled()
     expect(updater.state).toMatchObject({
       phase: 'available',
-      label: 'Install v0.2.0'
+      label: 'Update available',
+      version: '0.2.0'
     })
 
     await act(async () => {
@@ -75,10 +74,8 @@ describe('application updater', () => {
     await act(async () => {
       root.render(<Harness />)
     })
-    await act(async () => {
-      await updater.checkForUpdates()
-    })
 
+    expect(checkMock).toHaveBeenCalledTimes(1)
     expect(updater.state.phase).toBe('current')
 
     await act(async () => {
@@ -86,6 +83,60 @@ describe('application updater', () => {
     })
 
     expect(relaunchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps manual checks available after the launch check', async () => {
+    checkMock.mockResolvedValue(null)
+
+    await act(async () => {
+      root.render(<Harness />)
+    })
+    await act(async () => {
+      await updater.checkForUpdates()
+    })
+
+    expect(checkMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses separate current-version and install-version controls', () => {
+    const onCheckForUpdates = vi.fn()
+    const onInstallUpdate = vi.fn()
+
+    act(() => {
+      root.render(
+        <Sidebar
+          activePage="overview"
+          hasServers={true}
+          localState="idle"
+          onCheckForUpdates={onCheckForUpdates}
+          onInstallUpdate={onInstallUpdate}
+          onNavigate={() => undefined}
+          updateState={{
+            phase: 'available',
+            label: 'Update available',
+            detail: 'A signed update is available.',
+            version: '0.2.0'
+          }}
+        />
+      )
+    })
+
+    const currentVersion = container.querySelector<HTMLButtonElement>(
+      '.sidebar-current-version'
+    )
+    const newVersion = container.querySelector<HTMLButtonElement>(
+      '.sidebar-update-version'
+    )
+
+    expect(currentVersion?.textContent).toContain('Click to check for updates')
+    expect(newVersion?.textContent).toContain('v0.2.0')
+
+    act(() => currentVersion?.click())
+    expect(onCheckForUpdates).toHaveBeenCalledTimes(1)
+    expect(onInstallUpdate).not.toHaveBeenCalled()
+
+    act(() => newVersion?.click())
+    expect(onInstallUpdate).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -196,14 +196,21 @@ describe('state-driven interface', () => {
         onNavigate={() => undefined}
         updateState={{
           phase: 'available',
-          label: 'Install v0.2.0',
-          detail: 'A signed update to v0.2.0 is available.'
+          label: 'Update available',
+          detail: 'A signed update to v0.2.0 is available.',
+          version: '0.2.0'
         }}
       />
     )
 
     expect(sidebar).toContain('sidebar-version available')
-    expect(sidebar).toContain('Install v0.2.0')
+    expect(sidebar).toContain('sidebar-current-version')
+    expect(sidebar).toContain('Click to check for updates')
+    expect(sidebar).toContain('sidebar-update-version')
+    expect(sidebar).toContain('→ v0.2.0')
+    expect(sidebar.indexOf(`v${APP_VERSION}`)).toBeLessThan(
+      sidebar.indexOf('→ v0.2.0')
+    )
     expect(sidebar).not.toContain('disabled=""')
   })
 

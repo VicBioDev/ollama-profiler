@@ -1,6 +1,6 @@
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type UpdatePhase =
   | 'idle'
@@ -16,6 +16,7 @@ export interface AppUpdateState {
   readonly phase: UpdatePhase
   readonly label: string
   readonly detail: string
+  readonly version?: string
 }
 
 const IDLE_STATE: AppUpdateState = {
@@ -33,6 +34,7 @@ export function useAppUpdater(): {
   const availableUpdate = useRef<
     NonNullable<Awaited<ReturnType<typeof check>>> | undefined
   >(undefined)
+  const checkedOnLaunch = useRef(false)
 
   const checkForUpdates = useCallback(async (): Promise<void> => {
     if (
@@ -65,8 +67,9 @@ export function useAppUpdater(): {
       availableUpdate.current = update
       setState({
         phase: 'available',
-        label: `Install v${update.version}`,
-        detail: `A signed update to v${update.version} is available. Click to download and install it.`
+        label: 'Update available',
+        detail: `A signed update to v${update.version} is available. Click the new version to download and install it.`,
+        version: update.version
       })
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
@@ -77,6 +80,14 @@ export function useAppUpdater(): {
       })
     }
   }, [state.phase])
+
+  useEffect(() => {
+    if (checkedOnLaunch.current) {
+      return
+    }
+    checkedOnLaunch.current = true
+    void checkForUpdates()
+  }, [checkForUpdates])
 
   const installUpdate = useCallback(async (): Promise<void> => {
     if (state.phase !== 'available' || !availableUpdate.current) {
