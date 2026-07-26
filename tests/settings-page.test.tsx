@@ -2,7 +2,7 @@
 
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/defaults.js'
 import {
   createSettingsDraft,
@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 describe('settings number editing', () => {
-  it('allows every number field to be cleared before typing a replacement', () => {
+  it('allows every freeform number field to be cleared before typing a replacement', () => {
     act(() => {
       root.render(
         <SettingsPage
@@ -40,7 +40,7 @@ describe('settings number editing', () => {
       ...container.querySelectorAll<HTMLInputElement>('input[type="number"]')
     ]
 
-    expect(inputs).toHaveLength(5)
+    expect(inputs).toHaveLength(3)
     for (const input of inputs) {
       act(() => setInputValue(input, ''))
       expect(input.value).toBe('')
@@ -55,14 +55,92 @@ describe('settings number editing', () => {
     const parsed = parseSettingsDraft(
       {
         ...draft,
-        scanConcurrency: '',
-        benchmarkConcurrency: '10'
+        requestTimeoutMs: ''
       },
       DEFAULT_SETTINGS
     )
 
-    expect(parsed.scanConcurrency).toBe(DEFAULT_SETTINGS.scanConcurrency)
-    expect(parsed.benchmarkConcurrency).toBe(10)
+    expect(parsed.requestTimeoutMs).toBe(DEFAULT_SETTINGS.requestTimeoutMs)
+  })
+})
+
+describe('benchmark controls', () => {
+  it('offers the same five concurrency levels for scans and benchmarks', () => {
+    act(() => {
+      root.render(
+        <SettingsPage
+          busy={false}
+          onSaveSettings={async () => undefined}
+          settings={DEFAULT_SETTINGS}
+        />
+      )
+    })
+
+    const scanOptions = [
+      ...container.querySelectorAll<HTMLInputElement>(
+        'input[name="scanConcurrency"]'
+      )
+    ]
+    const benchmarkOptions = [
+      ...container.querySelectorAll<HTMLInputElement>(
+        'input[name="benchmarkConcurrency"]'
+      )
+    ]
+
+    expect(scanOptions.map(({ value }) => value)).toEqual(['2', '4', '8', '16', '32'])
+    expect(benchmarkOptions.map(({ value }) => value)).toEqual([
+      '2',
+      '4',
+      '8',
+      '16',
+      '32'
+    ])
+    expect(scanOptions.find(({ checked }) => checked)?.value).toBe('8')
+    expect(benchmarkOptions.find(({ checked }) => checked)?.value).toBe('4')
+  })
+
+  it('saves selected concurrency levels and a user-authored benchmark prompt', async () => {
+    const onSaveSettings = vi.fn(async () => undefined)
+    await act(async () => {
+      root.render(
+        <SettingsPage
+          busy={false}
+          onSaveSettings={onSaveSettings}
+          settings={DEFAULT_SETTINGS}
+        />
+      )
+    })
+
+    const scan32 = container.querySelector<HTMLInputElement>(
+      'input[name="scanConcurrency"][value="32"]'
+    )
+    const benchmark16 = container.querySelector<HTMLInputElement>(
+      'input[name="benchmarkConcurrency"][value="16"]'
+    )
+    const prompt = container.querySelector<HTMLTextAreaElement>('textarea')
+    const save = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      ({ textContent }) => textContent?.includes('Save settings')
+    )
+    if (!scan32 || !benchmark16 || !prompt || !save) {
+      throw new Error('Expected settings controls are unavailable')
+    }
+
+    await act(async () => {
+      scan32.click()
+      benchmark16.click()
+      setTextAreaValue(prompt, 'Explain why deterministic benchmarks matter.')
+    })
+    await act(async () => {
+      save.click()
+    })
+
+    expect(onSaveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanConcurrency: 32,
+        benchmarkConcurrency: 16,
+        benchmarkPrompt: 'Explain why deterministic benchmarks matter.'
+      })
+    )
   })
 })
 
@@ -74,4 +152,14 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   if (!setter) throw new Error('HTML input value setter is unavailable')
   setter.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+function setTextAreaValue(textarea: HTMLTextAreaElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype,
+    'value'
+  )?.set
+  if (!setter) throw new Error('HTML textarea value setter is unavailable')
+  setter.call(textarea, value)
+  textarea.dispatchEvent(new Event('input', { bubbles: true }))
 }

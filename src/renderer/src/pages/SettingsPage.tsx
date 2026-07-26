@@ -1,6 +1,8 @@
-import { Save, Shield, Workflow } from 'lucide-react'
+import { MessageSquareText, Save, Shield, Workflow } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AppSettings } from '@shared/types'
+
+const CONCURRENCY_OPTIONS = [2, 4, 8, 16, 32] as const
 
 interface SettingsPageProps {
   readonly settings: AppSettings
@@ -9,11 +11,11 @@ interface SettingsPageProps {
 }
 
 type EditableNumberKey =
-  | 'scanConcurrency'
-  | 'benchmarkConcurrency'
   | 'requestTimeoutMs'
   | 'benchmarkTimeoutMs'
   | 'benchmarkNumPredict'
+
+type ConcurrencyKey = 'scanConcurrency' | 'benchmarkConcurrency'
 
 type SettingsDraft = Omit<AppSettings, EditableNumberKey> &
   Record<EditableNumberKey, string>
@@ -45,6 +47,16 @@ export function SettingsPage({
   const updateNumber = (key: EditableNumberKey, value: string): void => {
     setNotice(undefined)
     setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const updateConcurrency = (key: ConcurrencyKey, value: number): void => {
+    setNotice(undefined)
+    setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const updatePrompt = (value: string): void => {
+    setNotice(undefined)
+    setDraft((current) => ({ ...current, benchmarkPrompt: value }))
   }
 
   const restoreEmptyNumber = (key: EditableNumberKey): void => {
@@ -82,37 +94,49 @@ export function SettingsPage({
               <p>Different servers can work in parallel.</p>
             </div>
           </header>
-          <div className="form-grid two-columns">
-            <label>
-              <span>Parallel inventory scans</span>
-              <input
-                max={32}
-                min={1}
-                onBlur={() => restoreEmptyNumber('scanConcurrency')}
-                onChange={(event) =>
-                  updateNumber('scanConcurrency', event.target.value)
-                }
-                type="number"
-                value={draft.scanConcurrency}
-              />
-            </label>
-            <label>
-              <span>Parallel server benchmarks</span>
-              <input
-                max={16}
-                min={1}
-                onBlur={() => restoreEmptyNumber('benchmarkConcurrency')}
-                onChange={(event) =>
-                  updateNumber('benchmarkConcurrency', event.target.value)
-                }
-                type="number"
-                value={draft.benchmarkConcurrency}
-              />
-            </label>
+          <div className="form-grid concurrency-grid">
+            <ConcurrencyPicker
+              label="Parallel inventory scans"
+              name="scanConcurrency"
+              onChange={(value) => updateConcurrency('scanConcurrency', value)}
+              value={draft.scanConcurrency}
+            />
+            <ConcurrencyPicker
+              label="Parallel server benchmarks"
+              name="benchmarkConcurrency"
+              onChange={(value) => updateConcurrency('benchmarkConcurrency', value)}
+              value={draft.benchmarkConcurrency}
+            />
             <p className="form-note">
               Models on the same server always benchmark one at a time, regardless of these
               values.
             </p>
+          </div>
+        </article>
+
+        <article className="panel settings-card full-width">
+          <header>
+            <span className="settings-icon">
+              <MessageSquareText size={17} />
+            </span>
+            <div>
+              <h2>Benchmark prompt</h2>
+              <p>Use the same prompt for every model so their results stay comparable.</p>
+            </div>
+          </header>
+          <div className="form-grid">
+            <label className="benchmark-prompt-field">
+              <span>Test prompt</span>
+              <textarea
+                maxLength={2_000}
+                onChange={(event) => updatePrompt(event.target.value)}
+                rows={5}
+                value={draft.benchmarkPrompt}
+              />
+              <small>
+                {draft.benchmarkPrompt.length.toLocaleString()} / 2,000 characters
+              </small>
+            </label>
           </div>
         </article>
 
@@ -193,8 +217,6 @@ export function SettingsPage({
 export function createSettingsDraft(settings: AppSettings): SettingsDraft {
   return {
     ...settings,
-    scanConcurrency: String(settings.scanConcurrency),
-    benchmarkConcurrency: String(settings.benchmarkConcurrency),
     requestTimeoutMs: String(settings.requestTimeoutMs),
     benchmarkTimeoutMs: String(settings.benchmarkTimeoutMs),
     benchmarkNumPredict: String(settings.benchmarkNumPredict)
@@ -207,11 +229,6 @@ export function parseSettingsDraft(
 ): AppSettings {
   return {
     ...draft,
-    scanConcurrency: parseDraftNumber(draft.scanConcurrency, fallback.scanConcurrency),
-    benchmarkConcurrency: parseDraftNumber(
-      draft.benchmarkConcurrency,
-      fallback.benchmarkConcurrency
-    ),
     requestTimeoutMs: parseDraftNumber(
       draft.requestTimeoutMs,
       fallback.requestTimeoutMs
@@ -231,4 +248,39 @@ function parseDraftNumber(value: string, fallback: number): number {
   if (!value.trim()) return fallback
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+interface ConcurrencyPickerProps {
+  readonly label: string
+  readonly name: ConcurrencyKey
+  readonly onChange: (value: number) => void
+  readonly value: number
+}
+
+function ConcurrencyPicker({
+  label,
+  name,
+  onChange,
+  value
+}: Readonly<ConcurrencyPickerProps>): React.JSX.Element {
+  return (
+    <fieldset className="concurrency-picker">
+      <legend>{label}</legend>
+      <div className="concurrency-options">
+        {CONCURRENCY_OPTIONS.map((option) => (
+          <label key={option}>
+            <input
+              checked={value === option}
+              name={name}
+              onChange={() => onChange(option)}
+              type="radio"
+              value={option}
+            />
+            <span>{option}</span>
+          </label>
+        ))}
+      </div>
+      <small>servers at once</small>
+    </fieldset>
+  )
 }

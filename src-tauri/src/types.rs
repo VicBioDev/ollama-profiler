@@ -256,7 +256,7 @@ impl AppSettings {
             benchmark_concurrency: patch
                 .benchmark_concurrency
                 .unwrap_or(self.benchmark_concurrency)
-                .clamp(1, 16),
+                .clamp(1, 32),
             connect_timeout_ms: patch
                 .connect_timeout_ms
                 .unwrap_or(self.connect_timeout_ms)
@@ -426,4 +426,23 @@ pub struct OllamaModelDetails {
 pub struct OllamaInventory {
     pub version: String,
     pub models: Vec<OllamaModelDetails>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppSettings, AppSettingsPatch};
+
+    #[test]
+    fn settings_accept_every_supported_concurrency_level() {
+        for concurrency in [2, 4, 8, 16, 32] {
+            let settings = AppSettings::default().apply_patch(AppSettingsPatch {
+                scan_concurrency: Some(concurrency),
+                benchmark_concurrency: Some(concurrency),
+                ..AppSettingsPatch::default()
+            });
+
+            assert_eq!(settings.scan_concurrency, concurrency);
+            assert_eq!(settings.benchmark_concurrency, concurrency);
+        }
+    }
 }

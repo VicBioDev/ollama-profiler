@@ -26,7 +26,9 @@ with no Docker, database service, or background web service required.
   model on a server; jobs on the same server are strictly sequential, so scans
   and model benchmarks never overlap
 - Process different servers concurrently: inventory scans default to 8 servers
-  and benchmarks to 4, both configurable in Settings
+  and benchmarks to 4; Settings offers 2, 4, 8, 16, or 32 workers for each task
+- Customize the shared benchmark prompt in Settings while keeping the same prompt
+  across every model in a run for comparable results
 - Show a live remaining-time estimate for active scans and benchmarks once
   enough recent progress is available
 - Keep the top toolbar scoped to the current page: Overview offers only a full
