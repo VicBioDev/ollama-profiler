@@ -8,6 +8,7 @@ import {
   installedModels,
   serverModelSpeed
 } from '../utils/format'
+import { CopyServerAddressButton } from './CopyServerAddressButton'
 import { StatusBadge } from './StatusBadge'
 
 interface ServerTableProps {
@@ -83,6 +84,8 @@ export function ServerTable({
         <tbody>
           {servers.map((server) => {
             const selected = selectedIds?.has(server.id) ?? false
+            const models = installedModels(server)
+            const modelTooltipId = `server-models-${server.id}`
             return (
               <tr
                 className={selected ? 'selected-row' : undefined}
@@ -104,22 +107,50 @@ export function ServerTable({
                   </td>
                 ) : null}
                 <td>
-                  <button
-                    className="endpoint-button"
-                    onClick={() => onSelect(server.id)}
-                    type="button"
-                  >
-                    <code>{server.endpoint}</code>
-                    <small>
-                      <MapPin size={11} />
-                      {[server.city, server.country].filter(Boolean).join(', ') || server.source}
-                    </small>
-                  </button>
+                  <div className="endpoint-cell">
+                    <button
+                      className="endpoint-button"
+                      onClick={() => onSelect(server.id)}
+                      type="button"
+                    >
+                      <code>{server.endpoint}</code>
+                      <small>
+                        <MapPin size={11} />
+                        {[server.city, server.country].filter(Boolean).join(', ') || server.source}
+                      </small>
+                    </button>
+                    <CopyServerAddressButton endpoint={server.endpoint} />
+                  </div>
                 </td>
                 <td>
                   <StatusBadge status={server.status} />
                 </td>
-                <td>{installedModels(server).length}</td>
+                <td>
+                  <span
+                    aria-describedby={modelTooltipId}
+                    aria-label={`${models.length} installed model${models.length === 1 ? '' : 's'}`}
+                    className="model-count"
+                    tabIndex={0}
+                  >
+                    {models.length}
+                    <span
+                      className="model-count-tooltip"
+                      id={modelTooltipId}
+                      role="tooltip"
+                    >
+                      <strong>Installed models</strong>
+                      {models.length > 0 ? (
+                        <span className="model-count-list">
+                          {models.map((model) => (
+                            <code key={model.id}>{model.name}</code>
+                          ))}
+                        </span>
+                      ) : (
+                        <small>No installed models</small>
+                      )}
+                    </span>
+                  </span>
+                </td>
                 <td className="mono">
                   {formatSpeed(
                     speedModelName

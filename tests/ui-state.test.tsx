@@ -371,6 +371,41 @@ describe('state-driven interface', () => {
     expect(html).not.toContain('120.0 tok/s')
   })
 
+  it('shows copy actions beside server addresses and model names beside the list count', () => {
+    const listServer = server(['completion'])
+    listServer.models.push({
+      ...listServer.models[0]!,
+      id: 'model-2',
+      name: 'qwen3:32b'
+    })
+    const tableHtml = renderToStaticMarkup(
+      <ServerTable
+        onSelect={() => undefined}
+        servers={[listServer]}
+      />
+    )
+    const detailHtml = renderToStaticMarkup(
+      <ServerDetailPage
+        onApprovalChange={() => undefined}
+        onBack={() => undefined}
+        onRemove={() => undefined}
+        server={listServer}
+      />
+    )
+
+    expect(tableHtml).toContain(
+      'aria-label="Copy server address: http://127.0.0.1:11434"'
+    )
+    expect(detailHtml).toContain(
+      'aria-label="Copy server address: http://127.0.0.1:11434"'
+    )
+    expect(detailHtml).toContain('Copy address')
+    expect(tableHtml).toContain('aria-label="2 installed models"')
+    expect(tableHtml).toContain('role="tooltip"')
+    expect(tableHtml).toContain('llama3.1:8b')
+    expect(tableHtml).toContain('qwen3:32b')
+  })
+
   it('exposes one global scan and benchmark action in every server context', () => {
     const overview = renderToStaticMarkup(
       <TopBar

@@ -727,11 +727,22 @@ tbody tr.selected-row {
 }
 
 .endpoint-button {
+  min-width: 0;
   max-width: 320px;
   padding: 0;
   color: inherit;
   text-align: left;
   background: none;
+}
+
+.endpoint-cell {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+
+.endpoint-cell .copy-address-button {
+  flex: 0 0 auto;
 }
 
 .endpoint-button code {
@@ -749,6 +760,119 @@ tbody tr.selected-row {
   margin-top: 7px;
   color: #636d7c;
   font-size: 10px;
+}
+
+.copy-address-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  color: #707989;
+  background: #171c22;
+  border: 1px solid #272e37;
+  border-radius: 7px;
+}
+
+.copy-address-button:hover,
+.copy-address-button:focus-visible {
+  color: var(--accent);
+  border-color: rgba(184, 244, 74, 0.35);
+  outline: none;
+}
+
+.copy-address-button.copied {
+  color: var(--green);
+  border-color: rgba(105, 232, 174, 0.3);
+}
+
+.copy-address-button.labeled {
+  width: auto;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.model-count {
+  position: relative;
+  display: inline-flex;
+  min-width: 24px;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-soft);
+  font: 11px "SFMono-Regular", monospace;
+  background: #171c22;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: default;
+}
+
+.model-count:hover,
+.model-count:focus-visible {
+  color: var(--accent);
+  border-color: rgba(184, 244, 74, 0.24);
+  outline: none;
+}
+
+.model-count-tooltip {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 9px);
+  z-index: 30;
+  display: grid;
+  width: max-content;
+  min-width: 180px;
+  max-width: min(320px, 40vw);
+  max-height: 280px;
+  padding: 11px 12px;
+  overflow-y: auto;
+  color: var(--text-soft);
+  pointer-events: none;
+  visibility: hidden;
+  background: var(--panel-bright);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  opacity: 0;
+  transform: translate(4px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.model-count:hover .model-count-tooltip,
+.model-count:focus-visible .model-count-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.model-count-tooltip > strong {
+  margin-bottom: 8px;
+  color: var(--text);
+  font: 600 10px/1.2 -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: 0.03em;
+}
+
+.model-count-tooltip > small {
+  color: var(--muted);
+  font: 10px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.model-count-list {
+  display: grid;
+  gap: 6px;
+}
+
+.model-count-list code {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .status-badge,
@@ -1185,6 +1309,20 @@ textarea:focus,
   overflow-wrap: anywhere;
   font: 500 clamp(26px, 3vw, 42px)/1.1 "SFMono-Regular", monospace;
   letter-spacing: -0.055em;
+}
+
+.detail-endpoint {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.detail-endpoint h1 {
+  min-width: 0;
+}
+
+.detail-endpoint .copy-address-button {
+  margin-top: 5px;
 }
 
 .fact-strip {

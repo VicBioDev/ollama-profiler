@@ -19,6 +19,7 @@ import {
   latestAttempt,
   latestSuccess
 } from '../utils/format'
+import { CopyServerAddressButton } from '../components/CopyServerAddressButton'
 import { StatusBadge } from '../components/StatusBadge'
 
 interface ServerDetailPageProps {
@@ -49,7 +50,10 @@ export function ServerDetailPage({
             <StatusBadge status={server.status} />
             <span>{server.ollamaVersion ? `Ollama ${server.ollamaVersion}` : 'Version unknown'}</span>
           </div>
-          <h1>{server.endpoint}</h1>
+          <div className="detail-endpoint">
+            <h1>{server.endpoint}</h1>
+            <CopyServerAddressButton endpoint={server.endpoint} showLabel />
+          </div>
           <p>{[server.city, server.region, server.country].filter(Boolean).join(', ') || server.source}</p>
         </div>
       </header>
