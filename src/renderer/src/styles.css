@@ -82,6 +82,10 @@ code,
   -webkit-app-region: drag;
 }
 
+[data-tauri-drag-region="false"] {
+  -webkit-app-region: no-drag;
+}
+
 .brand {
   position: relative;
   display: flex;
@@ -282,6 +286,8 @@ code,
   background: rgba(11, 13, 16, 0.9);
   border-bottom: 1px solid var(--border-soft);
   backdrop-filter: blur(18px);
+  -webkit-user-select: none;
+  user-select: none;
   -webkit-app-region: drag;
 }
 

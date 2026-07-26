@@ -29,7 +29,7 @@ export function TopBar({
     : undefined
 
   return (
-    <header className="topbar">
+    <header className="topbar" data-tauri-drag-region="deep">
       {primaryJob ? (
         <div aria-live="polite" className="task-state">
           <Activity size={14} />
@@ -47,6 +47,7 @@ export function TopBar({
         {profileAction ? (
           <button
             className="button primary compact"
+            data-tauri-drag-region="false"
             disabled={busy || profilingActive || profileAction.disabled}
             onClick={profileAction.onClick}
             title={profileAction.disabled ? profileAction.disabledReason : undefined}

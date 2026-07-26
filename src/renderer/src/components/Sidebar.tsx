@@ -34,7 +34,7 @@ export function Sidebar({
         (item) => item.id !== 'servers' && item.id !== 'chat'
       )
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" data-tauri-drag-region="deep">
       <div className="brand">
         <span className="brand-mark">
           <Mark size={19} />
@@ -53,6 +53,7 @@ export function Sidebar({
           return (
             <button
               className={activePage === item.id ? 'nav-item active' : 'nav-item'}
+              data-tauri-drag-region="false"
               key={item.id}
               onClick={() => onNavigate(item.id)}
               title={item.label}
@@ -72,6 +73,7 @@ export function Sidebar({
       <button
         aria-label={`Version ${APP_VERSION}. ${updateState?.label ?? 'Check for updates'}`}
         className={`sidebar-version ${updateState?.phase ?? 'idle'}`}
+        data-tauri-drag-region="false"
         disabled={
           updateState?.phase === 'checking' ||
           updateState?.phase === 'downloading' ||
