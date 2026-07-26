@@ -186,6 +186,28 @@ describe('state-driven interface', () => {
     expect(sidebar).toContain('disabled=""')
   })
 
+  it('offers installation as a separate action after an update is found', () => {
+    const sidebar = renderToStaticMarkup(
+      <Sidebar
+        activePage="overview"
+        hasServers
+        localState="idle"
+        onCheckForUpdates={() => undefined}
+        onInstallUpdate={() => undefined}
+        onNavigate={() => undefined}
+        updateState={{
+          phase: 'available',
+          label: 'Install v0.2.0',
+          detail: 'A signed update to v0.2.0 is available.'
+        }}
+      />
+    )
+
+    expect(sidebar).toContain('sidebar-version available')
+    expect(sidebar).toContain('Install v0.2.0')
+    expect(sidebar).not.toContain('disabled=""')
+  })
+
   it('shows benchmark permission only for generation-capable models', () => {
     const embeddingHtml = renderToStaticMarkup(
       <ServerDetailPage

@@ -10,6 +10,7 @@ interface SidebarProps {
   readonly hasServers: boolean
   readonly localState: 'idle' | 'busy' | 'online'
   readonly onCheckForUpdates?: () => void
+  readonly onInstallUpdate?: () => void
   readonly onNavigate: (page: PageId) => void
   readonly showSettings?: boolean
   readonly updateState?: AppUpdateState
@@ -20,6 +21,7 @@ export function Sidebar({
   hasServers,
   localState,
   onCheckForUpdates,
+  onInstallUpdate,
   onNavigate,
   showSettings = true,
   updateState
@@ -80,7 +82,9 @@ export function Sidebar({
           updateState?.phase === 'installing' ||
           updateState?.phase === 'restarting'
         }
-        onClick={onCheckForUpdates}
+        onClick={
+          updateState?.phase === 'available' ? onInstallUpdate : onCheckForUpdates
+        }
         title={updateState?.detail ?? 'Click to check for updates'}
         type="button"
       >

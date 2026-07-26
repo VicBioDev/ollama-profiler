@@ -79,7 +79,8 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
         hasServers={snapshot.servers.length > 0}
         localState={localBusy ? 'busy' : localOnline ? 'online' : 'idle'}
         onNavigate={navigate}
-        onCheckForUpdates={() => void updater.checkAndInstall()}
+        onCheckForUpdates={() => void updater.checkForUpdates()}
+        onInstallUpdate={() => void updater.installUpdate()}
         showSettings={window.ollamaProfiler.platform !== 'darwin'}
         updateState={updater.state}
       />

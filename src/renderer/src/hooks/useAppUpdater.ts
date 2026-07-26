@@ -1,11 +1,12 @@
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 export type UpdatePhase =
   | 'idle'
   | 'checking'
   | 'current'
+  | 'available'
   | 'downloading'
   | 'installing'
   | 'restarting'
@@ -25,11 +26,15 @@ const IDLE_STATE: AppUpdateState = {
 
 export function useAppUpdater(): {
   readonly state: AppUpdateState
-  readonly checkAndInstall: () => Promise<void>
+  readonly checkForUpdates: () => Promise<void>
+  readonly installUpdate: () => Promise<void>
 } {
   const [state, setState] = useState<AppUpdateState>(IDLE_STATE)
+  const availableUpdate = useRef<
+    NonNullable<Awaited<ReturnType<typeof check>>> | undefined
+  >(undefined)
 
-  const checkAndInstall = useCallback(async (): Promise<void> => {
+  const checkForUpdates = useCallback(async (): Promise<void> => {
     if (
       state.phase === 'checking' ||
       state.phase === 'downloading' ||
@@ -46,6 +51,7 @@ export function useAppUpdater(): {
     })
 
     try {
+      availableUpdate.current = undefined
       const update = await check({ timeout: 20_000 })
       if (!update) {
         setState({
@@ -56,6 +62,29 @@ export function useAppUpdater(): {
         return
       }
 
+      availableUpdate.current = update
+      setState({
+        phase: 'available',
+        label: `Install v${update.version}`,
+        detail: `A signed update to v${update.version} is available. Click to download and install it.`
+      })
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      setState({
+        phase: 'error',
+        label: 'Update check failed',
+        detail: message
+      })
+    }
+  }, [state.phase])
+
+  const installUpdate = useCallback(async (): Promise<void> => {
+    if (state.phase !== 'available' || !availableUpdate.current) {
+      return
+    }
+
+    const update = availableUpdate.current
+    try {
       let downloaded = 0
       let total: number | undefined
       setState({
@@ -94,6 +123,7 @@ export function useAppUpdater(): {
       })
       await relaunch()
     } catch (caught) {
+      availableUpdate.current = undefined
       const message = caught instanceof Error ? caught.message : String(caught)
       setState({
         phase: 'error',
@@ -103,5 +133,5 @@ export function useAppUpdater(): {
     }
   }, [state.phase])
 
-  return { state, checkAndInstall }
+  return { state, checkForUpdates, installUpdate }
 }

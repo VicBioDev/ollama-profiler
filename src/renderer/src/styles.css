@@ -264,6 +264,10 @@ code,
   color: var(--green);
 }
 
+.sidebar-version.available small {
+  color: var(--yellow);
+}
+
 .sidebar-version.error small {
   color: var(--red);
 }

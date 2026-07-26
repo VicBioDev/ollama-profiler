@@ -136,8 +136,9 @@ example, `v0.1.37`) with Tauri's `latest.json`, installers, and signatures. No
 manual tag is required. Pull Requests run checks without publishing a Release.
 
 The version number in the application's lower-left corner can check these GitHub
-Releases. When it finds a newer version, the application immediately downloads
-it, verifies the Tauri update signature, replaces the current installation, and
+Releases without modifying the application. When it finds a newer version, the
+version control offers a separate install action. Only a second click downloads
+the update, verifies its Tauri signature, replaces the current installation, and
 restarts. To ensure every Release can be safely verified by clients, configure
 the following before publishing:
 
