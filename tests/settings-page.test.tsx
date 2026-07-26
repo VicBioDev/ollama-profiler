@@ -97,6 +97,7 @@ describe('benchmark controls', () => {
     ])
     expect(scanOptions.find(({ checked }) => checked)?.value).toBe('8')
     expect(benchmarkOptions.find(({ checked }) => checked)?.value).toBe('4')
+    expect(container.textContent).toContain('Saved changes apply to running jobs')
   })
 
   it('saves selected concurrency levels and a user-authored benchmark prompt', async () => {

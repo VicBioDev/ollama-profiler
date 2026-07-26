@@ -109,7 +109,8 @@ export function SettingsPage({
             />
             <p className="form-note">
               Models on the same server always benchmark one at a time, regardless of these
-              values.
+              values. Saved changes apply to running jobs; lower limits take effect as
+              in-flight requests finish.
             </p>
           </div>
         </article>

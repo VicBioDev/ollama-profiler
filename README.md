@@ -27,6 +27,9 @@ with no Docker, database service, or background web service required.
   and model benchmarks never overlap
 - Process different servers concurrently: inventory scans default to 8 servers
   and benchmarks to 4; Settings offers 2, 4, 8, 16, or 32 workers for each task
+- Apply concurrency changes to active scans and benchmarks immediately; increases
+  fill new slots at once, while decreases let in-flight requests finish and then
+  enforce the lower limit
 - Customize the shared benchmark prompt in Settings while keeping the same prompt
   across every model in a run for comparable results
 - Open Settings directly from the persistent left navigation on every platform

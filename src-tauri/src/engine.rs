@@ -10,16 +10,21 @@ use crate::ollama_client::{OllamaClient, OllamaClientError};
 use crate::store::ProfilerStore;
 use crate::types::*;
 use chrono::{Duration, Utc};
-use futures_util::{StreamExt, stream};
+use futures_util::{
+    StreamExt,
+    future::{Either, select},
+    stream::{self, FuturesUnordered},
+};
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::future::Future;
 use std::sync::{
     Arc, Mutex, MutexGuard,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, watch};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -34,6 +39,7 @@ struct EngineInner {
     active_jobs: Mutex<HashMap<JobKind, String>>,
     server_locks: AsyncMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
     last_scheduled_scan: Mutex<Option<Instant>>,
+    settings_changed: watch::Sender<u64>,
     shutting_down: AtomicBool,
 }
 
@@ -48,6 +54,7 @@ const MAX_JOB_PROGRESS_SAMPLES: usize = 11;
 
 impl ProfilerEngine {
     pub fn new(app: AppHandle, store: ProfilerStore) -> Self {
+        let (settings_changed, _) = watch::channel(0);
         Self {
             inner: Arc::new(EngineInner {
                 app,
@@ -56,6 +63,7 @@ impl ProfilerEngine {
                 active_jobs: Mutex::new(HashMap::new()),
                 server_locks: AsyncMutex::new(HashMap::new()),
                 last_scheduled_scan: Mutex::new(None),
+                settings_changed,
                 shutting_down: AtomicBool::new(false),
             }),
         }
@@ -246,6 +254,9 @@ impl ProfilerEngine {
             snapshot.settings = snapshot.settings.apply_patch(patch);
             Ok(snapshot.settings.clone())
         })?;
+        self.inner
+            .settings_changed
+            .send_modify(|version| *version = version.wrapping_add(1));
         self.broadcast();
         Ok(settings)
     }
@@ -652,13 +663,16 @@ impl ProfilerEngine {
         if self.set_job_running(&job_id).is_err() {
             return;
         }
-        let concurrency = self
-            .get_snapshot()
-            .map(|snapshot| snapshot.settings.scan_concurrency)
-            .unwrap_or(1);
         let ready = Arc::new(Mutex::new(Vec::<String>::new()));
-        stream::iter(server_ids)
-            .map(|server_id| {
+        run_with_dynamic_concurrency(
+            server_ids,
+            self.inner.settings_changed.subscribe(),
+            || {
+                self.get_snapshot()
+                    .map(|snapshot| snapshot.settings.scan_concurrency)
+                    .unwrap_or(1)
+            },
+            |server_id| {
                 let engine = self.clone();
                 let job_id = job_id.clone();
                 let ready = ready.clone();
@@ -687,10 +701,9 @@ impl ProfilerEngine {
                     }
                     let _ = engine.increment_job(&job_id);
                 }
-            })
-            .buffer_unordered(concurrency.max(1))
-            .collect::<Vec<_>>()
-            .await;
+            },
+        )
+        .await;
         let _ = self.finish_job(&job_id, JobStatus::Completed, None, None);
         let ready = ready
             .lock()
@@ -846,12 +859,15 @@ impl ProfilerEngine {
         if self.set_job_running(&job_id).is_err() {
             return;
         }
-        let concurrency = self
-            .get_snapshot()
-            .map(|snapshot| snapshot.settings.benchmark_concurrency)
-            .unwrap_or(1);
-        stream::iter(server_ids)
-            .map(|server_id| {
+        run_with_dynamic_concurrency(
+            server_ids,
+            self.inner.settings_changed.subscribe(),
+            || {
+                self.get_snapshot()
+                    .map(|snapshot| snapshot.settings.benchmark_concurrency)
+                    .unwrap_or(1)
+            },
+            |server_id| {
                 let engine = self.clone();
                 let job_id = job_id.clone();
                 let resume_started_at = resume_started_at.clone();
@@ -866,10 +882,9 @@ impl ProfilerEngine {
                         .await;
                     let _ = engine.increment_job(&job_id);
                 }
-            })
-            .buffer_unordered(concurrency.max(1))
-            .collect::<Vec<_>>()
-            .await;
+            },
+        )
+        .await;
         let _ = self.finish_job(&job_id, JobStatus::Completed, None, None);
     }
 
@@ -1341,9 +1356,58 @@ fn failed_benchmark(error: OllamaClientError, started_at: String) -> BenchmarkRe
     }
 }
 
+async fn run_with_dynamic_concurrency<T, Task, TaskFuture, Limit>(
+    items: Vec<T>,
+    mut settings_changed: watch::Receiver<u64>,
+    mut current_limit: Limit,
+    task: Task,
+) where
+    Task: Fn(T) -> TaskFuture,
+    TaskFuture: Future<Output = ()>,
+    Limit: FnMut() -> usize,
+{
+    let mut pending = items.into_iter();
+    let mut in_flight = FuturesUnordered::new();
+    let mut has_pending = true;
+    let mut settings_watch_open = true;
+
+    loop {
+        if has_pending {
+            let available_slots = current_limit().max(1).saturating_sub(in_flight.len());
+            for _ in 0..available_slots {
+                if let Some(item) = pending.next() {
+                    in_flight.push(task(item));
+                } else {
+                    has_pending = false;
+                    break;
+                }
+            }
+        }
+
+        if in_flight.is_empty() {
+            break;
+        }
+
+        if has_pending && settings_watch_open {
+            let next_completion = in_flight.next();
+            let next_settings_change = settings_changed.changed();
+            futures_util::pin_mut!(next_completion, next_settings_change);
+            match select(next_completion, next_settings_change).await {
+                Either::Left(_) => {}
+                Either::Right((result, _)) => settings_watch_open = result.is_ok(),
+            }
+        } else {
+            let _ = in_flight.next().await;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicUsize;
+    use std::time::Duration as StdDuration;
+    use tokio::sync::{Semaphore, mpsc};
 
     fn benchmark_job(status: JobStatus, completed: usize, total: usize) -> ProfilerJob {
         ProfilerJob {
@@ -1455,5 +1519,121 @@ mod tests {
             &benchmark_model("2026-07-25T23:59:00Z"),
             "2026-07-26T00:00:00Z"
         ));
+    }
+
+    #[test]
+    fn increasing_concurrency_starts_more_work_before_the_current_task_finishes() {
+        tauri::async_runtime::block_on(async {
+            let limit = Arc::new(AtomicUsize::new(1));
+            let (settings_tx, settings_rx) = watch::channel(0);
+            let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+            let permits = Arc::new(Semaphore::new(0));
+
+            let scheduler = run_with_dynamic_concurrency(
+                vec![0, 1, 2, 3],
+                settings_rx,
+                {
+                    let limit = limit.clone();
+                    move || limit.load(Ordering::Relaxed)
+                },
+                {
+                    let permits = permits.clone();
+                    move |item| {
+                        let permits = permits.clone();
+                        let started_tx = started_tx.clone();
+                        async move {
+                            started_tx.send(item).expect("start receiver is open");
+                            permits
+                                .acquire_owned()
+                                .await
+                                .expect("semaphore is open")
+                                .forget();
+                        }
+                    }
+                },
+            );
+            let controller = async {
+                assert_eq!(started_rx.recv().await, Some(0));
+                limit.store(3, Ordering::Relaxed);
+                settings_tx.send_modify(|version| *version += 1);
+
+                let second = tokio::time::timeout(StdDuration::from_secs(1), started_rx.recv())
+                    .await
+                    .expect("a higher limit starts another task immediately");
+                let third = tokio::time::timeout(StdDuration::from_secs(1), started_rx.recv())
+                    .await
+                    .expect("a higher limit fills every available slot immediately");
+                let mut newly_started = [
+                    second.expect("second task has an id"),
+                    third.expect("third task has an id"),
+                ];
+                newly_started.sort_unstable();
+                assert_eq!(newly_started, [1, 2]);
+
+                permits.add_permits(4);
+            };
+
+            futures_util::future::join(scheduler, controller).await;
+        });
+    }
+
+    #[test]
+    fn decreasing_concurrency_waits_for_running_work_before_starting_more() {
+        tauri::async_runtime::block_on(async {
+            let limit = Arc::new(AtomicUsize::new(3));
+            let (settings_tx, settings_rx) = watch::channel(0);
+            let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+            let permits = Arc::new(Semaphore::new(0));
+
+            let scheduler = run_with_dynamic_concurrency(
+                vec![0, 1, 2, 3, 4],
+                settings_rx,
+                {
+                    let limit = limit.clone();
+                    move || limit.load(Ordering::Relaxed)
+                },
+                {
+                    let permits = permits.clone();
+                    move |item| {
+                        let permits = permits.clone();
+                        let started_tx = started_tx.clone();
+                        async move {
+                            started_tx.send(item).expect("start receiver is open");
+                            permits
+                                .acquire_owned()
+                                .await
+                                .expect("semaphore is open")
+                                .forget();
+                        }
+                    }
+                },
+            );
+            let controller = async {
+                assert_eq!(started_rx.recv().await, Some(0));
+                assert_eq!(started_rx.recv().await, Some(1));
+                assert_eq!(started_rx.recv().await, Some(2));
+
+                limit.store(1, Ordering::Relaxed);
+                settings_tx.send_modify(|version| *version += 1);
+                permits.add_permits(3);
+
+                assert_eq!(
+                    tokio::time::timeout(StdDuration::from_secs(1), started_rx.recv())
+                        .await
+                        .expect("one queued task starts after running work drains"),
+                    Some(3)
+                );
+                assert!(
+                    tokio::time::timeout(StdDuration::from_millis(50), started_rx.recv())
+                        .await
+                        .is_err(),
+                    "the next task must wait for the new single-worker limit"
+                );
+
+                permits.add_permits(2);
+            };
+
+            futures_util::future::join(scheduler, controller).await;
+        });
     }
 }
