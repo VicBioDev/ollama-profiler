@@ -14,8 +14,7 @@ interface ProfilerActions {
   commitImport: (options: ImportCommitOptions) => Promise<{ added: number; updated: number }>
   testLocalhost: () => Promise<void>
   scanLocalNetwork: () => Promise<void>
-  scanServers: (serverIds?: string[]) => Promise<void>
-  benchmarkServers: (serverIds?: string[]) => Promise<void>
+  profileAllServers: () => Promise<void>
   setBenchmarkApproval: (serverId: string, approved: boolean) => Promise<void>
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>
   removeServer: (serverId: string) => Promise<void>
@@ -69,11 +68,8 @@ export function useProfiler(): UseProfilerResult {
     scanLocalNetwork: async () => {
       await run(() => window.ollamaProfiler.scanLocalNetwork())
     },
-    scanServers: async (serverIds) => {
-      await run(() => window.ollamaProfiler.scanServers(serverIds))
-    },
-    benchmarkServers: async (serverIds) => {
-      await run(() => window.ollamaProfiler.benchmarkServers(serverIds))
+    profileAllServers: async () => {
+      await run(() => window.ollamaProfiler.profileAllServers())
     },
     setBenchmarkApproval: async (serverId, approved) => {
       await run(() => window.ollamaProfiler.setBenchmarkApproval(serverId, approved))

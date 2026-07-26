@@ -34,6 +34,12 @@ const FAILURE_BACKOFF_MS = [
 const SUCCESS_RETRY_MS = 24 * 60 * 60 * 1000
 const SERVER_BENCHMARK_GAP_MS = 30 * 60 * 1000
 
+interface ScanJobOptions {
+  readonly benchmarkAfterScan?: boolean
+  readonly forceBenchmark?: boolean
+  readonly label?: string
+}
+
 export class ProfilerEngine extends EventEmitter {
   private readonly importSessions = new Map<string, ImportPreview>()
   private readonly serverExecutor = new KeyedSerialExecutor()
@@ -84,7 +90,6 @@ export class ProfilerEngine extends EventEmitter {
     const preview = this.importSessions.get(options.previewId)
     if (!preview) throw new Error('The import preview expired; select the file again')
     const now = new Date().toISOString()
-    const touchedIds: string[] = []
     let added = 0
     let updated = 0
 
@@ -100,19 +105,17 @@ export class ProfilerEngine extends EventEmitter {
             discoverySources,
             lastDiscoveredAt: now
           })
-          touchedIds.push(existing.id)
           updated += 1
         } else {
           const server = candidateToServer(candidate, options.benchmarkApproved, now)
           snapshot.servers.push(server)
-          touchedIds.push(server.id)
           added += 1
         }
       }
     })
     this.importSessions.delete(options.previewId)
     this.broadcast()
-    this.queueScan(touchedIds, options.benchmarkApproved)
+    this.profileAllServers()
     return { added, updated }
   }
 
@@ -140,7 +143,22 @@ export class ProfilerEngine extends EventEmitter {
   }
 
   scanServers(serverIds?: string[]): string {
-    return this.queueScan(serverIds, false)
+    return this.queueScan(serverIds)
+  }
+
+  profileAllServers(): string {
+    const activeScan = this.findActiveJobId('scan')
+    if (activeScan) return activeScan
+    const activeBenchmark = this.findActiveJobId('benchmark')
+    if (activeBenchmark) return activeBenchmark
+    if (this.store.get().servers.length === 0) {
+      throw new Error('Add at least one server before starting a scan and benchmark')
+    }
+    return this.queueScan(undefined, {
+      benchmarkAfterScan: true,
+      forceBenchmark: true,
+      label: 'Scan all servers'
+    })
   }
 
   benchmarkServers(serverIds?: string[]): string {
@@ -368,7 +386,10 @@ export class ProfilerEngine extends EventEmitter {
       )?.id
   }
 
-  private queueScan(serverIds?: string[], benchmarkAfterScan = false): string {
+  private queueScan(
+    serverIds?: string[],
+    options: ScanJobOptions = {}
+  ): string {
     const active = this.findActiveJobId('scan')
     if (active) return active
     const snapshot = this.store.get()
@@ -376,16 +397,17 @@ export class ProfilerEngine extends EventEmitter {
       serverIds?.filter((id) => snapshot.servers.some((server) => server.id === id)) ??
       snapshot.servers.map((server) => server.id)
     const label =
-      ids.length === 1 ? 'Scan server inventory' : `Scan ${ids.length} server inventories`
+      options.label ??
+      (ids.length === 1 ? 'Scan server inventory' : `Scan ${ids.length} server inventories`)
     const job = this.createJob('scan', label, ids.length)
-    this.trackTask(this.runScanJob(job.id, ids, benchmarkAfterScan))
+    this.trackTask(this.runScanJob(job.id, ids, options))
     return job.id
   }
 
   private async runScanJob(
     jobId: string,
     serverIds: string[],
-    benchmarkAfterScan: boolean
+    options: ScanJobOptions
   ): Promise<void> {
     await this.setJobRunning(jobId)
     const settings = this.store.get().settings
@@ -401,7 +423,7 @@ export class ProfilerEngine extends EventEmitter {
             .get()
             .servers.find((server) => server.id === serverId)
           if (
-            benchmarkAfterScan &&
+            options.benchmarkAfterScan &&
             current &&
             isServerReadyForBenchmark(current)
           ) {
@@ -414,8 +436,8 @@ export class ProfilerEngine extends EventEmitter {
       if (!this.shuttingDown && readyForBenchmark.length > 0) {
         this.queueBenchmark(
           readyForBenchmark,
-          false,
-          'Benchmark approved local models'
+          options.forceBenchmark ?? false,
+          'Benchmark all approved local models'
         )
       }
     } catch (error) {
@@ -674,7 +696,9 @@ export class ProfilerEngine extends EventEmitter {
       if (now - this.lastScheduledScanAt >= 60 * 60 * 1000) {
         if (this.findActiveJobId('scan') || this.findActiveJobId('benchmark')) return
         this.lastScheduledScanAt = now
-        if (snapshot.servers.length > 0) this.queueScan(undefined, true)
+        if (snapshot.servers.length > 0) {
+          this.queueScan(undefined, { benchmarkAfterScan: true })
+        }
         return
       }
       const dueServers = snapshot.servers

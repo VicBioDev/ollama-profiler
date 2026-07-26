@@ -48,12 +48,7 @@ export function registerIpc(engine: ProfilerEngine, getWindow: () => BrowserWind
   )
   ipcMain.handle('profiler:test-localhost', () => engine.testLocalhost())
   ipcMain.handle('profiler:scan-local-network', () => engine.scanLocalNetwork())
-  ipcMain.handle('profiler:scan-servers', (_event, serverIds?: string[]) =>
-    engine.scanServers(serverIds)
-  )
-  ipcMain.handle('profiler:benchmark-servers', (_event, serverIds?: string[]) =>
-    engine.benchmarkServers(serverIds)
-  )
+  ipcMain.handle('profiler:profile-all-servers', () => engine.profileAllServers())
   ipcMain.handle(
     'profiler:set-benchmark-approval',
     (_event, serverId: string, approved: boolean) =>

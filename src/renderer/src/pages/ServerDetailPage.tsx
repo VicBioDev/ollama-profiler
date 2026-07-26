@@ -85,7 +85,7 @@ export function ServerDetailPage({
               </strong>
               <small>
                 {server.benchmarkApproved
-                  ? `${completionModels.length} compatible model${completionModels.length === 1 ? '' : 's'} can be run or re-run from the toolbar.`
+                  ? `${completionModels.length} compatible model${completionModels.length === 1 ? '' : 's'} will be included the next time Scan & benchmark all runs.`
                   : 'Enable only for a server you own or are authorized to profile.'}
               </small>
             </span>
@@ -177,7 +177,9 @@ export function ServerDetailPage({
             )
           })}
           {models.length === 0 ? (
-            <p className="quiet-copy padded-copy">Run a scan to load this server’s model inventory.</p>
+            <p className="quiet-copy padded-copy">
+              Run Scan &amp; benchmark all to load this server’s model inventory.
+            </p>
           ) : null}
         </div>
       </section>

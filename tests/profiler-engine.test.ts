@@ -34,6 +34,45 @@ async function listen(handler: RequestListener): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
+async function waitForProfileJobs(
+  engine: ProfilerEngine,
+  scanJobId: string,
+  completedBenchmarkJobs: number
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      engine.off('snapshot', check)
+      reject(new Error('Scan and benchmark jobs timed out'))
+    }, 4_000)
+    const check = (): void => {
+      const jobs = engine.getSnapshot().jobs
+      const scan = jobs.find((job) => job.id === scanJobId)
+      const failed = jobs.find(
+        (job) =>
+          (job.id === scanJobId || job.kind === 'benchmark') &&
+          job.status === 'failed'
+      )
+      if (failed) {
+        clearTimeout(timeout)
+        engine.off('snapshot', check)
+        reject(new Error(failed.errorMessage ?? `${failed.kind} job failed`))
+        return
+      }
+      const benchmarks = jobs.filter(
+        (job) => job.kind === 'benchmark' && job.status === 'completed'
+      )
+      if (scan?.status !== 'completed' || benchmarks.length < completedBenchmarkJobs) {
+        return
+      }
+      clearTimeout(timeout)
+      engine.off('snapshot', check)
+      resolve()
+    }
+    engine.on('snapshot', check)
+    check()
+  })
+}
+
 describe('profiler task lifecycle', () => {
   it('migrates restart interruptions to cancelled tasks', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'ollama-profiler-test-'))
@@ -96,6 +135,147 @@ describe('profiler task lifecycle', () => {
     expect(jobs).toHaveLength(1)
     expect(jobs[0]?.status).toBe('cancelled')
     expect(jobs[0]?.summary).toBe('Cancelled because the application closed.')
+  })
+
+  it('scans every server before benchmarking every approved online server', async () => {
+    const inventoryCompleted = new Set<string>()
+    const generatedOn: string[] = []
+    let benchmarkStartedBeforeScanningFinished = false
+    let activeBenchmarks = 0
+    let maximumActiveBenchmarks = 0
+
+    const createOllamaHandler = (serverName: string): RequestListener =>
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json')
+        if (request.url === '/api/version') {
+          response.end(JSON.stringify({ version: '0.12.3' }))
+          return
+        }
+        if (request.url === '/api/tags') {
+          response.end(JSON.stringify({
+            models: [
+              { name: 'qwen3:8b' },
+              { name: 'kimi-k2.7-code:cloud' },
+              { name: 'nomic-embed-text:latest' }
+            ]
+          }))
+          return
+        }
+
+        let body = ''
+        request.setEncoding('utf8')
+        request.on('data', (chunk: string) => {
+          body += chunk
+        })
+        request.on('end', () => {
+          const payload = JSON.parse(body) as { model: string }
+          if (request.url === '/api/show') {
+            const capabilities =
+              payload.model === 'nomic-embed-text:latest'
+                ? ['embedding']
+                : ['completion']
+            if (payload.model === 'nomic-embed-text:latest') {
+              inventoryCompleted.add(serverName)
+            }
+            response.end(JSON.stringify({
+              capabilities,
+              details: {
+                family: 'qwen3',
+                parameter_size: '8B',
+                quantization_level: 'Q4_K_M'
+              }
+            }))
+            return
+          }
+          if (request.url === '/api/generate') {
+            if (inventoryCompleted.size !== 3) {
+              benchmarkStartedBeforeScanningFinished = true
+            }
+            generatedOn.push(serverName)
+            activeBenchmarks += 1
+            maximumActiveBenchmarks = Math.max(
+              maximumActiveBenchmarks,
+              activeBenchmarks
+            )
+            response.setHeader('Content-Type', 'application/x-ndjson')
+            setTimeout(() => {
+              response.write(`${JSON.stringify({ response: 'Hello', done: false })}\n`)
+              response.end(`${JSON.stringify({
+                response: '',
+                done: true,
+                eval_count: 64,
+                eval_duration: 2_000_000_000
+              })}\n`)
+              activeBenchmarks -= 1
+            }, 20)
+            return
+          }
+          response.statusCode = 404
+          response.end()
+        })
+      }
+
+    const endpoints = await Promise.all([
+      listen(createOllamaHandler('approved-a')),
+      listen(createOllamaHandler('approved-b')),
+      listen(createOllamaHandler('unapproved'))
+    ])
+    const directory = await mkdtemp(join(tmpdir(), 'ollama-profiler-test-'))
+    temporaryDirectories.push(directory)
+    const store = new ProfilerStore(join(directory, 'profiler-data.json'))
+    const engine = new ProfilerEngine(store)
+    await engine.initialize()
+    const now = '2026-07-26T00:00:00.000Z'
+    await store.mutate((snapshot) => {
+      snapshot.servers.push(
+        ...endpoints.map((endpoint, index) => ({
+          id: `server-${index + 1}`,
+          endpoint,
+          source: 'manual' as const,
+          status: 'unknown' as const,
+          failureCount: 0,
+          benchmarkApproved: index < 2,
+          firstDiscoveredAt: now,
+          lastDiscoveredAt: now,
+          models: []
+        }))
+      )
+    })
+
+    const firstScanJobId = engine.profileAllServers()
+    expect(engine.profileAllServers()).toBe(firstScanJobId)
+    await waitForProfileJobs(engine, firstScanJobId, 1)
+
+    const firstSnapshot = engine.getSnapshot()
+    expect(firstSnapshot.servers.every((server) => server.status === 'online')).toBe(true)
+    expect(firstSnapshot.servers.every((server) => server.models.length === 3)).toBe(true)
+    expect(generatedOn.toSorted()).toEqual(['approved-a', 'approved-b'])
+    expect(maximumActiveBenchmarks).toBe(2)
+    expect(benchmarkStartedBeforeScanningFinished).toBe(false)
+    expect(
+      firstSnapshot.servers[2]?.models.every((model) => model.benchmarks.length === 0)
+    ).toBe(true)
+    for (const approved of firstSnapshot.servers.slice(0, 2)) {
+      expect(
+        approved.models.find((model) => model.name === 'qwen3:8b')?.benchmarks
+      ).toHaveLength(1)
+      expect(
+        approved.models.find((model) => model.name.endsWith(':cloud'))?.benchmarks
+      ).toHaveLength(0)
+      expect(
+        approved.models.find((model) => model.name === 'nomic-embed-text:latest')
+          ?.benchmarks
+      ).toHaveLength(0)
+    }
+
+    inventoryCompleted.clear()
+    const secondScanJobId = engine.profileAllServers()
+    await waitForProfileJobs(engine, secondScanJobId, 2)
+    expect(
+      engine.getSnapshot().servers[0]?.models.find((model) => model.name === 'qwen3:8b')
+        ?.benchmarks
+    ).toHaveLength(2)
+    await engine.shutdown()
   })
 
   it('benchmarks every local generation model serially within a server', async () => {

@@ -300,39 +300,52 @@ describe('state-driven interface', () => {
     expect(html).not.toContain('120.0 tok/s')
   })
 
-  it('keeps overview scan-only and exposes benchmark actions in server context', () => {
+  it('exposes one global scan and benchmark action in every server context', () => {
     const overview = renderToStaticMarkup(
       <TopBar
         busy={false}
         jobs={[]}
-        scanAction={{ label: 'Scan all', onClick: () => undefined }}
+        profileAction={{ label: 'Scan & benchmark all', onClick: () => undefined }}
       />
     )
     const serverContext = renderToStaticMarkup(
       <TopBar
-        benchmarkAction={{
-          label: 'Re-run benchmark',
-          onClick: () => undefined
-        }}
         busy={false}
         jobs={[]}
-        scanAction={{ label: 'Scan server', onClick: () => undefined }}
+        profileAction={{ label: 'Scan & benchmark all', onClick: () => undefined }}
       />
     )
 
-    expect(overview).toContain('Scan all')
-    expect(overview).not.toContain('benchmark')
-    expect(serverContext).toContain('Scan server')
-    expect(serverContext).toContain('Re-run benchmark')
+    expect(overview).toContain('Scan &amp; benchmark all')
+    expect(serverContext).toContain('Scan &amp; benchmark all')
+    expect(serverContext).not.toContain('Scan server')
+    expect(serverContext).not.toContain('Re-run benchmark')
   })
 
-  it('shows active profiling progress and prevents duplicate toolbar actions', () => {
-    const html = renderToStaticMarkup(
+  it('shows the current profiling stage and prevents duplicate global actions', () => {
+    const scanning = renderToStaticMarkup(
       <TopBar
-        benchmarkAction={{
-          label: 'Run benchmarks (2)',
+        busy={false}
+        jobs={[
+          {
+            id: 'scan-job',
+            kind: 'scan',
+            status: 'running',
+            label: 'Scan all servers',
+            completed: 1,
+            total: 2,
+            createdAt: '2026-07-26T00:00:00.000Z',
+            updatedAt: '2026-07-26T00:00:00.000Z'
+          }
+        ]}
+        profileAction={{
+          label: 'Scan & benchmark all',
           onClick: () => undefined
         }}
+      />
+    )
+    const benchmarking = renderToStaticMarkup(
+      <TopBar
         busy={false}
         jobs={[
           {
@@ -346,13 +359,19 @@ describe('state-driven interface', () => {
             updatedAt: '2026-07-26T00:00:00.000Z'
           }
         ]}
-        scanAction={{ label: 'Scan all', onClick: () => undefined }}
+        profileAction={{
+          label: 'Scan & benchmark all',
+          onClick: () => undefined
+        }}
       />
     )
 
-    expect(html).toContain('Re-run benchmarks for 2 servers · 1/2')
-    expect(html).toContain('Benchmarking…')
-    expect(html.match(/disabled/g)?.length).toBe(2)
+    expect(scanning).toContain('Scan all servers · 1/2')
+    expect(scanning).toContain('Scanning all…')
+    expect(scanning.match(/disabled/g)?.length).toBe(1)
+    expect(benchmarking).toContain('Re-run benchmarks for 2 servers · 1/2')
+    expect(benchmarking).toContain('Benchmarking all…')
+    expect(benchmarking.match(/disabled/g)?.length).toBe(1)
   })
 
   it('shows only local discovery actions before a local scan', () => {

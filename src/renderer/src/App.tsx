@@ -1,7 +1,5 @@
 import { AlertCircle, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import type { ServerRecord } from '@shared/types'
-import { isBenchmarkableLocalModel } from '@shared/model-utils'
 import { Sidebar, type PageId } from './components/Sidebar'
 import { TopBar, type TopBarAction } from './components/TopBar'
 import { useProfiler } from './hooks/useProfiler'
@@ -46,20 +44,13 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
     )
   }
 
-  const scanAction: TopBarAction | undefined =
+  const profileAction: TopBarAction | undefined =
     snapshot.servers.length === 0
       ? undefined
       : {
-          label: selectedServer ? 'Scan server' : 'Scan all',
-          onClick: () =>
-            void actions.scanServers(selectedServer ? [selectedServer.id] : undefined)
+          label: 'Scan & benchmark all',
+          onClick: () => void actions.profileAllServers()
         }
-  const benchmarkAction = createBenchmarkAction(
-    page,
-    selectedServer,
-    snapshot.servers,
-    (serverIds) => void actions.benchmarkServers(serverIds)
-  )
 
   return (
     <div className="app-shell">
@@ -71,10 +62,9 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
       />
       <div className="main-shell">
         <TopBar
-          benchmarkAction={benchmarkAction}
           busy={busy}
           jobs={snapshot.jobs}
-          scanAction={scanAction}
+          profileAction={profileAction}
         />
         {error ? (
           <div className="global-error">
@@ -148,43 +138,4 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
       </div>
     </div>
   )
-}
-
-function createBenchmarkAction(
-  page: PageId,
-  selectedServer: ServerRecord | undefined,
-  servers: ServerRecord[],
-  onBenchmark: (serverIds: string[]) => void
-): TopBarAction | undefined {
-  if (selectedServer) {
-    const hasHistory = selectedServer.models.some((model) => model.benchmarks.length > 0)
-    const disabledReason = benchmarkDisabledReason(selectedServer)
-    return {
-      label: hasHistory ? 'Re-run benchmark' : 'Run benchmark',
-      onClick: () => onBenchmark([selectedServer.id]),
-      disabled: Boolean(disabledReason),
-      disabledReason
-    }
-  }
-  if (page !== 'servers') return undefined
-
-  const eligible = servers.filter((server) => !benchmarkDisabledReason(server))
-  return {
-    label: `Run benchmarks (${eligible.length})`,
-    onClick: () => onBenchmark(eligible.map((server) => server.id)),
-    disabled: eligible.length === 0,
-    disabledReason:
-      eligible.length === 0
-        ? 'Approve benchmarking on an online server with a generation-capable model first.'
-        : undefined
-  }
-}
-
-function benchmarkDisabledReason(server: ServerRecord): string | undefined {
-  if (!server.benchmarkApproved) return 'Enable benchmark permission for this server first.'
-  if (server.status !== 'online') return 'The server must be online before benchmarking.'
-  if (!server.models.some(isBenchmarkableLocalModel)) {
-    return 'Scan the server first to find a generation-capable model.'
-  }
-  return undefined
 }

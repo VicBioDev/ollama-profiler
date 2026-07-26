@@ -155,8 +155,7 @@ export interface DesktopApi {
   commitImport: (options: ImportCommitOptions) => Promise<{ added: number; updated: number }>
   testLocalhost: () => Promise<string>
   scanLocalNetwork: () => Promise<string>
-  scanServers: (serverIds?: string[]) => Promise<string>
-  benchmarkServers: (serverIds?: string[]) => Promise<string>
+  profileAllServers: () => Promise<string>
   setBenchmarkApproval: (serverId: string, approved: boolean) => Promise<void>
   updateSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>
   removeServer: (serverId: string) => Promise<void>

@@ -79,8 +79,8 @@ export function ImportPreviewCard({
         <span>
           <strong>I own or have permission to benchmark these servers</strong>
           <small>
-            After the read-only inventory scan, completion models will be tested serially per
-            server. Different servers run in parallel.
+            After import, all servers are scanned first. Approved online servers are then
+            benchmarked in parallel, with their local models tested one at a time.
           </small>
         </span>
       </label>
@@ -95,7 +95,7 @@ export function ImportPreviewCard({
           type="button"
         >
           <FileSearch size={15} />
-          Import and scan
+          Import and profile all
         </button>
       </footer>
     </section>

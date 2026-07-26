@@ -21,10 +21,7 @@ const api: DesktopApi = {
     ipcRenderer.invoke('profiler:commit-import', options),
   testLocalhost: () => ipcRenderer.invoke('profiler:test-localhost'),
   scanLocalNetwork: () => ipcRenderer.invoke('profiler:scan-local-network'),
-  scanServers: (serverIds?: string[]) =>
-    ipcRenderer.invoke('profiler:scan-servers', serverIds),
-  benchmarkServers: (serverIds?: string[]) =>
-    ipcRenderer.invoke('profiler:benchmark-servers', serverIds),
+  profileAllServers: () => ipcRenderer.invoke('profiler:profile-all-servers'),
   setBenchmarkApproval: (serverId: string, approved: boolean) =>
     ipcRenderer.invoke('profiler:set-benchmark-approval', serverId, approved),
   updateSettings: (settings: Partial<AppSettings>) =>

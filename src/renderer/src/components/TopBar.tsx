@@ -1,4 +1,4 @@
-import { Activity, Gauge, RefreshCw } from 'lucide-react'
+import { Activity, RefreshCw } from 'lucide-react'
 import type { ProfilerJob } from '@shared/types'
 
 export interface TopBarAction {
@@ -11,15 +11,13 @@ export interface TopBarAction {
 interface TopBarProps {
   readonly busy: boolean
   readonly jobs: ProfilerJob[]
-  readonly scanAction?: TopBarAction
-  readonly benchmarkAction?: TopBarAction
+  readonly profileAction?: TopBarAction
 }
 
 export function TopBar({
   busy,
   jobs,
-  scanAction,
-  benchmarkAction
+  profileAction
 }: Readonly<TopBarProps>): React.JSX.Element {
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'running')
   const activeScan = activeJobs.find((job) => job.kind === 'scan')
@@ -42,28 +40,20 @@ export function TopBar({
         </div>
       ) : <span />}
       <div className="topbar-actions">
-        {scanAction ? (
-          <button
-            className="button secondary compact"
-            disabled={busy || profilingActive || scanAction.disabled}
-            onClick={scanAction.onClick}
-            title={scanAction.disabled ? scanAction.disabledReason : undefined}
-            type="button"
-          >
-            <RefreshCw className={activeScan ? 'spin' : ''} size={14} />
-            {activeScan ? 'Scanning…' : scanAction.label}
-          </button>
-        ) : null}
-        {benchmarkAction ? (
+        {profileAction ? (
           <button
             className="button primary compact"
-            disabled={busy || profilingActive || benchmarkAction.disabled}
-            onClick={benchmarkAction.onClick}
-            title={benchmarkAction.disabled ? benchmarkAction.disabledReason : undefined}
+            disabled={busy || profilingActive || profileAction.disabled}
+            onClick={profileAction.onClick}
+            title={profileAction.disabled ? profileAction.disabledReason : undefined}
             type="button"
           >
-            <Gauge className={activeBenchmark ? 'spin' : ''} size={14} />
-            {activeBenchmark ? 'Benchmarking…' : benchmarkAction.label}
+            <RefreshCw className={profilingActive ? 'spin' : ''} size={14} />
+            {activeScan
+              ? 'Scanning all…'
+              : activeBenchmark
+                ? 'Benchmarking all…'
+                : profileAction.label}
           </button>
         ) : null}
       </div>
