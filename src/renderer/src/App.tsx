@@ -13,6 +13,7 @@ import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ChatPage } from './pages/ChatPage'
 import { isLocalDiscoveryServer } from './hooks/useLocalDiscovery'
+import { useBenchmarkContinuationOnLaunch } from './hooks/useBenchmarkContinuationOnLaunch'
 import { confirmBenchmarkContinuation } from '@shared/job-utils'
 
 interface AppProps {}
@@ -43,6 +44,11 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
   useEffect(
     () => window.ollamaProfiler.subscribeToNavigation((target) => navigate(target)),
     []
+  )
+  useBenchmarkContinuationOnLaunch(
+    snapshot,
+    confirmDialog,
+    actions.profileAllServers
   )
 
   if (!snapshot) {

@@ -52,8 +52,8 @@ with no Docker, database service, or background web service required.
   and retry failures with 1/6/24/72-hour backoff
 - Deduplicate Scan and Benchmark jobs of the same type; on a normal application
   exit, mark running jobs as canceled instead of ordinary benchmark failures;
-  when a full job is run again, resume unfinished benchmarks from the previous
-  run
+  on the next launch, offer to continue unfinished benchmarks from the previous
+  run or start over
 - Reveal the interface progressively: before import, show only guidance for
   adding servers; before benchmarking, do not display empty metrics
 
