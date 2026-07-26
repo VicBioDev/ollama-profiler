@@ -8,8 +8,7 @@
       "ES2023"
     ],
     "types": [
-      "node",
-      "electron-vite/node"
+      "node"
     ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -21,15 +20,14 @@
       "@shared/*": [
         "./src/shared/*"
       ],
-      "@main/*": [
-        "./src/main/*"
+      "@renderer/*": [
+        "./src/renderer/src/*"
       ]
     }
   },
   "include": [
-    "electron.vite.config.ts",
-    "src/main/**/*.ts",
-    "src/preload/**/*.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts"
   ]

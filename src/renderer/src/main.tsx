@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { createDesktopApi } from './data/desktopApi'
 import './styles.css'
 
 async function bootstrap(): Promise<void> {
@@ -11,6 +12,8 @@ async function bootstrap(): Promise<void> {
   if (!window.ollamaProfiler && isStitchPreview) {
     const { createPreviewApi } = await import('./data/previewApi')
     window.ollamaProfiler = createPreviewApi()
+  } else if (!window.ollamaProfiler && window.__TAURI_INTERNALS__) {
+    window.ollamaProfiler = createDesktopApi()
   }
 
   const root = document.getElementById('root')

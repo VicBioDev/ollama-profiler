@@ -1,10 +1,11 @@
-name: Build desktop packages
+name: Build and publish Tauri desktop app
 
 on:
   pull_request:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,152 +16,118 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     outputs:
       version: ${{ steps.version.outputs.value }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - id: version
-        name: Resolve A.B.commit-count version
-        run: echo "value=$(node scripts/version.cjs)" >> "$GITHUB_OUTPUT"
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
       - run: npm ci
+      - id: version
+        name: Resolve A.B.commit-count version
+        run: echo "value=$(node scripts/version.cjs)" >> "$GITHUB_OUTPUT"
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: npm audit --omit=dev --audit-level=high
 
   package:
-    if: github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: test
-    timeout-minutes: 30
+    timeout-minutes: 45
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-15
-            arch: arm64
             artifact: macos-arm64
           - os: macos-15-intel
-            arch: x64
             artifact: macos-x64
           - os: windows-latest
-            arch: x64
             artifact: windows-x64
-          - os: ubuntu-latest
-            arch: x64
+          - os: ubuntu-24.04
             artifact: linux-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Install Tauri Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - name: Require macOS signing and notarization secrets
-        if: runner.os == 'macOS'
+      - run: node scripts/version.cjs --write
+      - name: Require the updater signing key
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
+            echo "Missing required GitHub secret: TAURI_SIGNING_PRIVATE_KEY" >&2
+            exit 1
+          fi
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.MAC_CSC_LINK }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          missing=()
-          for variable in \
-            CSC_LINK \
-            CSC_KEY_PASSWORD \
-            APPLE_ID \
-            APPLE_APP_SPECIFIC_PASSWORD \
-            APPLE_TEAM_ID
-          do
-            if [[ -z "${!variable}" ]]; then
-              missing+=("$variable")
-            fi
-          done
-          if (( ${#missing[@]} > 0 )); then
-            echo "Missing required macOS signing secrets: ${missing[*]}" >&2
-            exit 1
-          fi
-      - name: Build desktop package
-        run: npm run dist -- --${{ matrix.arch }}
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ runner.os == 'macOS' && 'true' || 'false' }}
-          CSC_LINK: ${{ runner.os == 'macOS' && secrets.MAC_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
-      - name: Verify macOS Developer ID signature and notarization
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          app_path="$(find release -type d -name 'Ollama Profiler.app' -print -quit)"
-          if [[ -z "$app_path" ]]; then
-            echo "Packaged macOS application was not found." >&2
-            exit 1
-          fi
-
-          codesign --verify --deep --strict --verbose=2 "$app_path"
-          signature_details="$(codesign -dv --verbose=4 "$app_path" 2>&1)"
-          printf '%s\n' "$signature_details"
-          if ! grep -q '^Authority=Developer ID Application:' <<<"$signature_details"; then
-            echo "The application is not signed with a Developer ID Application certificate." >&2
-            exit 1
-          fi
-
-          spctl --assess --type execute --verbose=4 "$app_path"
-          xcrun stapler validate "$app_path"
-      - uses: actions/upload-artifact@v7
         with:
-          name: ollama-profiler-${{ needs.test.outputs.version }}-${{ matrix.artifact }}
-          if-no-files-found: error
-          retention-days: 14
-          path: |
-            release/*.AppImage
-            release/*.deb
-            release/*.dmg
-            release/*.exe
-            release/*.zip
-            release/*.blockmap
+          args: --config src-tauri/tauri.version.conf.json
+          tagName: v${{ needs.test.outputs.version }}
+          releaseName: Ollama Profiler v${{ needs.test.outputs.version }}
+          releaseBody: See the assets below to install or update Ollama Profiler.
+          releaseDraft: true
+          prerelease: false
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs:
       - test
       - package
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v5
-        with:
-          pattern: ollama-profiler-${{ needs.test.outputs.version }}-*
-          merge-multiple: true
-          path: release-assets
-      - name: Publish GitHub release
+      - name: Publish the complete signed release
         shell: bash
-        run: |
-          tag="v${{ needs.test.outputs.version }}"
-          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $tag already exists; nothing to publish."
-          else
-            gh release create "$tag" release-assets/* \
-              -R "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "Ollama Profiler $tag" \
-              --generate-notes
-          fi
+        run: gh release edit "v${{ needs.test.outputs.version }}" --draft=false --repo "$GITHUB_REPOSITORY"
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

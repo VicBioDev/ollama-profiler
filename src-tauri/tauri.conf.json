@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Ollama Profiler",
+  "version": "0.1.0",
+  "identifier": "dev.ollamaprofiler.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev:web",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../out/renderer"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Ollama Profiler",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 820,
+        "minHeight": 620,
+        "backgroundColor": "#1c1c1e",
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "copyright": "Copyright © 2026 VicBioDev",
+    "shortDescription": "Profile fleets of Ollama servers",
+    "longDescription": "Discover Ollama servers, inspect installed models, and compare real generation performance.",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY1NTdBOUYyQjZERTQ4MDAKUldRQVNONjI4cWxYWlhSUnB6RzdNRDZGSTFORmxUOWVpSkVTNm1YdU0wVld3MnBaWDEzK2RYdmUK",
+      "endpoints": [
+        "https://github.com/VicBioDev/ollama-profiler/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

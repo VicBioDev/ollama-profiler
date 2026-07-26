@@ -9,6 +9,11 @@ const GENERATED_VERSION_FILE = join(
   'shared',
   'generated-version.ts'
 )
+const GENERATED_TAURI_VERSION_FILE = join(
+  PROJECT_ROOT,
+  'src-tauri',
+  'tauri.version.conf.json'
+)
 
 function readBaseVersion(projectRoot = PROJECT_ROOT) {
   const packageJson = JSON.parse(
@@ -65,6 +70,22 @@ function writeGeneratedVersion(projectRoot = PROJECT_ROOT) {
     existing = undefined
   }
   if (existing !== contents) writeFileSync(target, contents, 'utf8')
+
+  const tauriTarget =
+    projectRoot === PROJECT_ROOT
+      ? GENERATED_TAURI_VERSION_FILE
+      : join(projectRoot, 'src-tauri', 'tauri.version.conf.json')
+  const tauriContents = `${JSON.stringify({ version }, null, 2)}\n`
+  mkdirSync(dirname(tauriTarget), { recursive: true })
+  let existingTauri
+  try {
+    existingTauri = readFileSync(tauriTarget, 'utf8')
+  } catch {
+    existingTauri = undefined
+  }
+  if (existingTauri !== tauriContents) {
+    writeFileSync(tauriTarget, tauriContents, 'utf8')
+  }
   return version
 }
 

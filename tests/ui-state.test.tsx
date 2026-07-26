@@ -143,6 +143,45 @@ describe('state-driven interface', () => {
     expect(topbar).not.toContain('Profiler ready')
   })
 
+  it('lets macOS keep Settings in the application menu', () => {
+    const sidebar = renderToStaticMarkup(
+      <Sidebar
+        activePage="overview"
+        hasServers
+        localState="idle"
+        onNavigate={() => undefined}
+        showSettings={false}
+      />
+    )
+
+    expect(sidebar).not.toContain('>Settings<')
+    expect(sidebar).toContain('>Overview<')
+    expect(sidebar).toContain('>Servers<')
+    expect(sidebar).toContain('>Import<')
+    expect(sidebar).toContain('>Localhost<')
+  })
+
+  it('shows updater progress in the version control', () => {
+    const sidebar = renderToStaticMarkup(
+      <Sidebar
+        activePage="overview"
+        hasServers
+        localState="idle"
+        onCheckForUpdates={() => undefined}
+        onNavigate={() => undefined}
+        updateState={{
+          phase: 'downloading',
+          label: 'Downloading 42%',
+          detail: 'Downloading a signed update.'
+        }}
+      />
+    )
+
+    expect(sidebar).toContain('sidebar-version downloading')
+    expect(sidebar).toContain('Downloading 42%')
+    expect(sidebar).toContain('disabled=""')
+  })
+
   it('shows benchmark permission only for generation-capable models', () => {
     const embeddingHtml = renderToStaticMarkup(
       <ServerDetailPage

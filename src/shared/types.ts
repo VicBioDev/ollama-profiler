@@ -147,9 +147,20 @@ export interface ServerFilter {
   status?: ServerStatus | 'all'
 }
 
+export type DesktopNavigationTarget =
+  | 'overview'
+  | 'servers'
+  | 'imports'
+  | 'settings'
+  | 'local'
+
 export interface DesktopApi {
+  readonly platform: string
   getSnapshot: () => Promise<ProfilerSnapshot>
   subscribe: (listener: (snapshot: ProfilerSnapshot) => void) => () => void
+  subscribeToNavigation: (
+    listener: (target: DesktopNavigationTarget) => void
+  ) => () => void
   selectImportFile: () => Promise<ImportPreview | null>
   previewText: (contents: string) => Promise<ImportPreview>
   commitImport: (options: ImportCommitOptions) => Promise<{ added: number; updated: number }>

@@ -56,7 +56,8 @@ Ollama Profiler 是一个开源、跨平台的桌面应用，用来批量扫描�
 
 ## 开发
 
-要求 Node.js 22 或更高版本。
+要求 Node.js 22 或更高版本，以及 Rust stable 工具链。Linux 还需要
+Tauri 官方列出的 WebKitGTK 4.1 等系统依赖。
 
 ```bash
 npm install
@@ -69,6 +70,7 @@ npm run dev
 npm run typecheck
 npm test
 npm run build
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 生成当前平台安装包：
@@ -77,8 +79,9 @@ npm run build
 npm run dist
 ```
 
-`electron-builder` 会在 `release/` 下生成产物。macOS、Windows 与 Linux 安装包应分别
-在对应操作系统构建；GitHub Actions 的发布矩阵也遵循这一约束。
+Tauri 会在 `src-tauri/target/release/bundle/` 下生成当前平台的安装包及更新产物。
+macOS、Windows 与 Linux 安装包应分别在对应操作系统构建；GitHub Actions 的发布
+矩阵也遵循这一约束。
 
 ## 版本与发布
 
@@ -95,18 +98,24 @@ npm run dist
 npm run version:current
 ```
 
-推送到 `main` 时，GitHub Actions 会先运行检查，再在 macOS Apple Silicon、macOS
-Intel、Windows x64 和 Linux x64 上并行生成未签名安装包。四个平台全部成功后，
-工作流会自动为当前 commit 创建匹配版本（例如 `v0.1.37`）的标签和 GitHub Release，
-并上传所有安装包；不需要手动创建 tag。Pull Request 只运行检查，不发布 Release。
+推送到 `main` 或手动运行工作流时，GitHub Actions 会先运行 TypeScript、React 和
+Rust 检查，再在 macOS Apple Silicon、macOS Intel、Windows x64 和 Linux x64 上
+并行构建。四个平台全部成功后，工作流会自动发布匹配版本（例如 `v0.1.37`）的
+GitHub Release，并附带 Tauri 的 `latest.json`、安装包和签名；不需要手动创建 tag。
+Pull Request 只运行检查，不发布 Release。
 
-没有配置 Apple Developer 证书时，macOS 安装包会使用完整的 ad-hoc 签名。首次打开
-仍可能被 Gatekeeper 阻止；确认文件来自本仓库后，可在“系统设置 → 隐私与安全性”
-中选择“仍要打开”。完全消除警告需要 Apple Developer Program 的 Developer ID
-签名和 notarization。
+应用左下角的版本号可以主动检查上述 GitHub Release。找到更高版本后会立即下载、
+校验 Tauri 更新签名、替换当前安装并重新启动。为了确保 Release 永远能被客户端安全
+验证，发布前必须配置：
 
-配置以下 GitHub Secrets 后，同一工作流会自动改用 Developer ID 签名并提交 Apple
-notarization：
+- `TAURI_SIGNING_PRIVATE_KEY`：与 `src-tauri/tauri.conf.json` 中公钥配对的私钥
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码；无密码密钥可留空
+
+私钥不得提交到仓库。当前维护者生成的本机密钥默认位于
+`~/.tauri/ollama-profiler.key`，应另做安全备份。
+
+配置以下 GitHub Secrets 后，同一工作流也会使用 Developer ID 签名并提交 Apple
+notarization；未配置时仍可构建，但首次打开可能被 Gatekeeper 拦截：
 
 - `MAC_CSC_LINK`：Developer ID Application `.p12` 的 Base64 内容
 - `MAC_CSC_KEY_PASSWORD`：证书导出密码
@@ -114,9 +123,9 @@ notarization：
 - `APPLE_APP_SPECIFIC_PASSWORD`：Apple ID 专用密码
 - `APPLE_TEAM_ID`：10 位 Team ID
 
-Windows 安装包目前也未做 Authenticode 签名，SmartScreen 可能显示未知发布者。
+Windows 安装包目前未做 Authenticode 签名，SmartScreen 可能显示未知发布者。
 
-可编辑的主图标位于 `build/icon.svg`，打包使用同目录下生成的 PNG 和 ICO。
+可编辑的主图标位于 `build/icon.svg`，Tauri 打包图标位于 `src-tauri/icons/`。
 
 ## 导入格式
 
@@ -136,10 +145,11 @@ FOFA/通用表格可使用以下任一字段：
 
 ## 架构
 
-- Electron 主进程：文件访问、Ollama 网络请求、本地持久化与任务调度
-- Preload bridge：受限的类型化 IPC，渲染器没有 Node.js 权限
+- Tauri/Rust 核心：文件访问、Ollama 网络请求、本地持久化与任务调度
+- Tauri commands 与 capabilities：受限的类型化 IPC，渲染器没有 Node.js 权限
 - React/TypeScript：桌面界面、筛选、导入预览和性能历史
 - JSON 文档存储：原子写入应用用户目录，避免原生数据库扩展的跨平台打包负担
+- Tauri updater：从 GitHub Release 读取 `latest.json`，只安装签名匹配的更新
 
 项目的第一目标是可靠的本地 profiling。公网资产来源只通过用户主动选择的导出文件
 导入，不在应用内连接搜索或地图 API。

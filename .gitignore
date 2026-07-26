@@ -15,6 +15,9 @@ coverage/
 .playwright-cli/
 output/playwright/
 src/shared/generated-version.ts
+src-tauri/tauri.version.conf.json
+src-tauri/target/
+src-tauri/gen/schemas/
 .stitch/designs/
 .stitch/metadata.json
 *.log

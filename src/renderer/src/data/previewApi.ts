@@ -222,8 +222,10 @@ const preview: ImportPreview = {
 
 export function createPreviewApi(): DesktopApi {
   return {
+    platform: 'darwin',
     getSnapshot: async () => snapshot,
     subscribe: () => () => undefined,
+    subscribeToNavigation: () => () => undefined,
     selectImportFile: async () => preview,
     previewText: async () => preview,
     commitImport: async () => ({ added: 0, updated: 4 }),

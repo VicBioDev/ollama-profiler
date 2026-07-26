@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { APP_VERSION } from '@shared/generated-version'
+import type { AppUpdateState } from '../hooks/useAppUpdater'
 import { APP_COPY, NAV_ITEMS } from '../data/uiCopy'
 
 export type PageId = (typeof NAV_ITEMS)[number]['id']
@@ -8,19 +9,28 @@ interface SidebarProps {
   readonly activePage: PageId
   readonly hasServers: boolean
   readonly localState: 'idle' | 'busy' | 'online'
+  readonly onCheckForUpdates?: () => void
   readonly onNavigate: (page: PageId) => void
+  readonly showSettings?: boolean
+  readonly updateState?: AppUpdateState
 }
 
 export function Sidebar({
   activePage,
   hasServers,
   localState,
-  onNavigate
+  onCheckForUpdates,
+  onNavigate,
+  showSettings = true,
+  updateState
 }: Readonly<SidebarProps>): React.JSX.Element {
   const Mark = APP_COPY.mark
-  const visibleItems = hasServers
+  const availableItems = showSettings
     ? NAV_ITEMS
-    : NAV_ITEMS.filter((item) => item.id !== 'servers')
+    : NAV_ITEMS.filter((item) => item.id !== 'settings')
+  const visibleItems = hasServers
+    ? availableItems
+    : availableItems.filter((item) => item.id !== 'servers')
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -43,6 +53,7 @@ export function Sidebar({
               className={activePage === item.id ? 'nav-item active' : 'nav-item'}
               key={item.id}
               onClick={() => onNavigate(item.id)}
+              title={item.label}
               type="button"
             >
               <span className="nav-icon-wrap">
@@ -56,9 +67,24 @@ export function Sidebar({
           )
         })}
       </nav>
-      <div aria-label={`Version ${APP_VERSION}`} className="sidebar-version">
-        v{APP_VERSION}
-      </div>
+      <button
+        aria-label={`Version ${APP_VERSION}. ${updateState?.label ?? 'Check for updates'}`}
+        className={`sidebar-version ${updateState?.phase ?? 'idle'}`}
+        disabled={
+          updateState?.phase === 'checking' ||
+          updateState?.phase === 'downloading' ||
+          updateState?.phase === 'installing' ||
+          updateState?.phase === 'restarting'
+        }
+        onClick={onCheckForUpdates}
+        title={updateState?.detail ?? 'Click to check for updates'}
+        type="button"
+      >
+        <span>v{APP_VERSION}</span>
+        {updateState && updateState.phase !== 'idle' ? (
+          <small>{updateState.label}</small>
+        ) : null}
+      </button>
     </aside>
   )
 }

@@ -1,8 +1,9 @@
 import { AlertCircle, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Sidebar, type PageId } from './components/Sidebar'
 import { TopBar, type TopBarAction } from './components/TopBar'
 import { useProfiler } from './hooks/useProfiler'
+import { useAppUpdater } from './hooks/useAppUpdater'
 import { ImportPage } from './pages/ImportPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { LocalDiscoveryPage } from './pages/LocalDiscoveryPage'
@@ -15,6 +16,7 @@ interface AppProps {}
 
 export default function App(_props: Readonly<AppProps>): React.JSX.Element {
   const { snapshot, busy, error, actions } = useProfiler()
+  const updater = useAppUpdater()
   const [page, setPage] = useState<PageId>('overview')
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const selectedServer = useMemo(
@@ -34,6 +36,11 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
     setPage(target)
     setSelectedServerId(undefined)
   }
+
+  useEffect(
+    () => window.ollamaProfiler.subscribeToNavigation((target) => navigate(target)),
+    []
+  )
 
   if (!snapshot) {
     return (
@@ -59,6 +66,9 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
         hasServers={snapshot.servers.length > 0}
         localState={localBusy ? 'busy' : localOnline ? 'online' : 'idle'}
         onNavigate={navigate}
+        onCheckForUpdates={() => void updater.checkAndInstall()}
+        showSettings={window.ollamaProfiler.platform !== 'darwin'}
+        updateState={updater.state}
       />
       <div className="main-shell">
         <TopBar

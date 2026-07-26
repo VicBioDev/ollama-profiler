@@ -2,32 +2,43 @@
   "source": {
     "projectId": "1215570123286233356",
     "screenId": "c774d03390b745d39fb119484caef798",
-    "syncedAt": "2026-07-25T15:25:47Z"
+    "syncedAt": "2026-07-25T15:25:47Z",
+    "platformGuidance": "https://developer.apple.com/design/human-interface-guidelines/designing-for-macos"
+  },
+  "platform": {
+    "primary": "macOS",
+    "principles": [
+      "Use the system typeface and follow the system light or dark appearance.",
+      "Keep primary navigation in a leading sidebar that compacts as the window narrows.",
+      "Expose app-wide commands in the menu bar with standard keyboard shortcuts.",
+      "Prefer comfortable information density, direct manipulation, and minimal modality.",
+      "Use familiar selection, focus, control, and destructive-action treatments."
+    ]
   },
   "theme": {
     "colors": {
-      "background": "#0b0d10",
-      "panel": "#111419",
-      "panelStrong": "#151920",
-      "panelBright": "#1a1f27",
-      "panelSoft": "#0e1115",
-      "border": "#252b34",
-      "borderSoft": "#1e242c",
-      "text": "#f2f4f7",
-      "textSoft": "#bdc4cf",
-      "muted": "#747e8e",
-      "accent": "#b8f44a",
-      "success": "#69e8ae",
-      "warning": "#ffce6b",
-      "error": "#ff7d86"
+      "background": "#1c1c1e",
+      "panel": "rgba(44, 44, 46, 0.78)",
+      "panelStrong": "#2c2c2e",
+      "panelBright": "#3a3a3c",
+      "panelSoft": "rgba(28, 28, 30, 0.70)",
+      "border": "rgba(255, 255, 255, 0.12)",
+      "borderSoft": "rgba(255, 255, 255, 0.08)",
+      "text": "#f5f5f7",
+      "textSoft": "rgba(235, 235, 245, 0.78)",
+      "muted": "rgba(235, 235, 245, 0.50)",
+      "accent": "macOS AccentColor with #0a84ff fallback",
+      "success": "#30d158",
+      "warning": "#ffd60a",
+      "error": "#ff453a",
+      "appearance": "Adaptive light and dark"
     },
     "typography": {
       "sans": [
-        "Inter",
-        "ui-sans-serif",
         "-apple-system",
         "BlinkMacSystemFont",
-        "Segoe UI",
+        "SF Pro Text",
+        "Helvetica Neue",
         "sans-serif"
       ],
       "mono": [
@@ -37,24 +48,25 @@
         "monospace"
       ],
       "sizes": {
-        "eyebrow": "10px",
-        "body": "14px",
-        "panelTitle": "19px",
-        "metric": "28px",
-        "pageTitle": "clamp(38px, 4vw, 62px)"
+        "eyebrow": "11px",
+        "body": "13px",
+        "panelTitle": "15px",
+        "metric": "24px",
+        "pageTitle": "clamp(26px, 2.4vw, 34px)"
       }
     },
     "spacing": {
       "unit": "4px",
-      "sidebarWidth": "216px",
-      "toolbarHeight": "58px",
-      "pageGutter": "clamp(28px, 4vw, 64px)",
-      "panelPadding": "24px"
+      "sidebarWidth": "232px",
+      "compactSidebarWidth": "68px",
+      "toolbarHeight": "52px",
+      "pageGutter": "clamp(24px, 3vw, 44px)",
+      "panelPadding": "18px"
     },
     "borderRadius": {
-      "control": "8px",
-      "panel": "11px",
-      "large": "12px",
+      "control": "7px",
+      "panel": "10px",
+      "large": "10px",
       "pill": "999px"
     }
   }

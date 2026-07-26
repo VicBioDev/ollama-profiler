@@ -62,26 +62,24 @@ describe('automatic application version', () => {
     })
   })
 
-  it('ad-hoc signs complete macOS bundles when release credentials are absent', async () => {
-    const packageScript = await readFile(
-      resolve(projectRoot, 'scripts/package.cjs'),
-      'utf8'
+  it('requires signed updater artifacts from the GitHub release feed', async () => {
+    const tauriConfig = JSON.parse(
+      await readFile(resolve(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8')
     )
-    const entitlements = await readFile(
-      resolve(projectRoot, 'build/entitlements.mac.plist'),
-      'utf8'
+    const capabilities = JSON.parse(
+      await readFile(
+        resolve(projectRoot, 'src-tauri/capabilities/default.json'),
+        'utf8'
+      )
     )
 
-    expect(packageScript).toContain("'--config.mac.identity=-'")
-    expect(packageScript).toContain('CSC_LINK')
-    expect(packageScript).toContain('CSC_IDENTITY_AUTO_DISCOVERY')
-    expect(packageScript).toContain("'--config.mac.notarize=true'")
-    expect(packageScript).toContain('APPLE_APP_SPECIFIC_PASSWORD')
-    expect(packageScript).toContain('delete packagingEnvironment[variable]')
-    expect(entitlements).toContain('com.apple.security.cs.allow-jit')
-    expect(entitlements).toContain(
-      'com.apple.security.cs.disable-library-validation'
-    )
+    expect(tauriConfig.bundle.createUpdaterArtifacts).toBe(true)
+    expect(tauriConfig.plugins.updater.pubkey).toMatch(/^[A-Za-z0-9+/=]+$/)
+    expect(tauriConfig.plugins.updater.endpoints).toEqual([
+      'https://github.com/VicBioDev/ollama-profiler/releases/latest/download/latest.json'
+    ])
+    expect(capabilities.permissions).toContain('updater:default')
+    expect(capabilities.permissions).toContain('process:allow-restart')
   })
 
   it('publishes each successful main build without a manual tag push', async () => {
@@ -91,10 +89,12 @@ describe('automatic application version', () => {
     )
 
     expect(workflow).toContain("github.ref == 'refs/heads/main'")
-    expect(workflow).toContain('tag="v${{ needs.test.outputs.version }}"')
-    expect(workflow).toContain('gh release create "$tag"')
-    expect(workflow).toContain('-R "$GITHUB_REPOSITORY"')
-    expect(workflow).toContain('--target "$GITHUB_SHA"')
+    expect(workflow).toContain('tauri-apps/tauri-action@v1')
+    expect(workflow).toContain('tagName: v${{ needs.test.outputs.version }}')
+    expect(workflow).toContain('TAURI_SIGNING_PRIVATE_KEY')
+    expect(workflow).toContain('releaseDraft: true')
+    expect(workflow).toContain('gh release edit')
+    expect(workflow).toContain('--draft=false')
     expect(workflow).not.toContain('tags:')
   })
 })
