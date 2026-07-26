@@ -45,10 +45,20 @@ export function buildChatModelCatalog(
     }))
     .sort(
       (left, right) =>
-        (right.bestTokensPerSecond ?? -1) -
-          (left.bestTokensPerSecond ?? -1) ||
+        right.serverCount - left.serverCount ||
         left.name.localeCompare(right.name)
     )
+}
+
+export function searchChatModelCatalog(
+  catalog: readonly ChatModelChoice[],
+  query: string
+): ChatModelChoice[] {
+  const normalizedQuery = normalizeModelName(query)
+  if (!normalizedQuery) return [...catalog]
+  return catalog.filter(({ name }) =>
+    normalizeModelName(name).includes(normalizedQuery)
+  )
 }
 
 export function routeChatModels(

@@ -39,6 +39,8 @@ with no Docker, database service, or background web service required.
 - Search models with suggestions and filter servers by status and country-level
   region; after selecting an exact model, the speed column shows its name and
   displays and sorts only that model's latest successful speed
+- Search the stateless Chat model picker by name; available models are ranked by
+  how many eligible servers have them installed, with alphabetical tie-breaking
 - Select servers individually or select all current filtered results, then
   delete them in bulk or export CSV; exports include Endpoint, city/country
   Region, and TPS, using the selected model's speed when an exact model is

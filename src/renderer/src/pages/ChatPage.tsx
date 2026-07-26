@@ -2,6 +2,7 @@ import {
   CircleAlert,
   Clock3,
   MessageSquareText,
+  Search,
   Send,
   ShieldCheck,
   X,
@@ -10,7 +11,8 @@ import {
 import { useMemo, useState } from 'react'
 import {
   buildChatModelCatalog,
-  routeChatModels
+  routeChatModels,
+  searchChatModelCatalog
 } from '@shared/chat-routing'
 import type {
   ChatRequest,
@@ -34,7 +36,8 @@ export function ChatPage({
   const [selectedModelNames, setSelectedModelNames] = useState<string[]>(
     () => catalog[0] ? [catalog[0].name] : []
   )
-  const [candidateName, setCandidateName] = useState('')
+  const [modelQuery, setModelQuery] = useState('')
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [response, setResponse] = useState<ChatResponse>()
   const [sending, setSending] = useState(false)
@@ -45,13 +48,18 @@ export function ChatPage({
   const availableChoices = catalog.filter(
     ({ name }) => !selectedKeys.has(name.toLowerCase())
   )
+  const matchingChoices = searchChatModelCatalog(availableChoices, modelQuery)
   const route = useMemo(
     () => routeChatModels(servers, selectedModelNames),
     [selectedModelNames, servers]
   )
 
-  const addModel = (): void => {
-    const nextName = candidateName || availableChoices[0]?.name
+  const addModel = (requestedName?: string): void => {
+    const exactChoice = availableChoices.find(
+      ({ name }) =>
+        name.toLowerCase() === (requestedName ?? modelQuery).trim().toLowerCase()
+    )
+    const nextName = exactChoice?.name || matchingChoices[0]?.name
     if (!nextName || selectedModelNames.length >= 4) return
     const nextSelection = [...selectedModelNames, nextName]
     if (!routeChatModels(servers, nextSelection)) {
@@ -61,7 +69,8 @@ export function ChatPage({
       return
     }
     setSelectedModelNames(nextSelection)
-    setCandidateName('')
+    setModelQuery('')
+    setModelPickerOpen(false)
     setNotice(undefined)
     setResponse(undefined)
   }
@@ -158,28 +167,82 @@ export function ChatPage({
         </header>
 
         <div className="chat-model-picker">
-          <select
-            aria-label="Model to add"
-            disabled={selectedModelNames.length >= 4 || availableChoices.length === 0}
-            onChange={(event) => setCandidateName(event.target.value)}
-            value={candidateName || availableChoices[0]?.name || ''}
+          <div
+            className="chat-model-search"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setModelPickerOpen(false)
+              }
+            }}
           >
-            {availableChoices.map((choice) => (
-              <option key={choice.name} value={choice.name}>
-                {choice.name} · {choice.serverCount} server
-                {choice.serverCount === 1 ? '' : 's'}
-              </option>
-            ))}
-          </select>
+            <Search aria-hidden="true" size={14} />
+            <input
+              aria-autocomplete="list"
+              aria-controls="chat-model-suggestions"
+              aria-expanded={modelPickerOpen}
+              aria-label="Search chat models"
+              disabled={selectedModelNames.length >= 4 || availableChoices.length === 0}
+              onChange={(event) => {
+                setModelQuery(event.target.value)
+                setModelPickerOpen(true)
+                setNotice(undefined)
+              }}
+              onFocus={() => setModelPickerOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && matchingChoices.length > 0) {
+                  event.preventDefault()
+                  addModel()
+                } else if (event.key === 'Escape') {
+                  setModelPickerOpen(false)
+                }
+              }}
+              placeholder="Search models"
+              role="combobox"
+              type="search"
+              value={modelQuery}
+            />
+            {modelPickerOpen ? (
+              <div
+                className="chat-model-suggestions"
+                id="chat-model-suggestions"
+                role="listbox"
+              >
+                {matchingChoices.length > 0 ? (
+                  matchingChoices.map((choice) => (
+                    <button
+                      aria-selected="false"
+                      key={choice.name}
+                      onClick={() => addModel(choice.name)}
+                      role="option"
+                      type="button"
+                    >
+                      <span>{choice.name}</span>
+                      <small>
+                        {choice.serverCount} eligible server
+                        {choice.serverCount === 1 ? '' : 's'}
+                      </small>
+                    </button>
+                  ))
+                ) : (
+                  <span className="chat-model-suggestions-empty">
+                    No available model matches
+                  </span>
+                )}
+              </div>
+            ) : null}
+          </div>
           <button
             className="button secondary"
-            disabled={selectedModelNames.length >= 4 || availableChoices.length === 0}
-            onClick={addModel}
+            disabled={selectedModelNames.length >= 4 || matchingChoices.length === 0}
+            onClick={() => addModel()}
             type="button"
           >
             Add model
           </button>
         </div>
+        <p className="chat-model-order-note">
+          Models are ranked by how many eligible servers have them installed.
+        </p>
 
         <div className="chat-route-grid">
           {route?.targets.map((target) => (

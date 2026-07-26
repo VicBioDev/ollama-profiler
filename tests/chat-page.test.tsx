@@ -50,6 +50,10 @@ describe('chat page', () => {
     expect(html).toContain('qwen3:8b')
     expect(html).toContain('42.0 tok/s')
     expect(html).toContain('http://127.0.0.1:11434')
+    expect(html).toContain('aria-label="Search chat models"')
+    expect(html).toContain(
+      'Models are ranked by how many eligible servers have them installed.'
+    )
   })
 
   it('points users to generation approval when no model is eligible', () => {

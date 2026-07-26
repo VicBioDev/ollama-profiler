@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildChatModelCatalog,
-  routeChatModels
+  routeChatModels,
+  searchChatModelCatalog
 } from '@shared/chat-routing.js'
 import type {
   BenchmarkResult,
@@ -101,5 +102,33 @@ describe('stateless chat routing', () => {
         bestTokensPerSecond: 42
       }
     ])
+  })
+
+  it('sorts the catalog by eligible-server popularity, then model name', () => {
+    const servers = [
+      server('1', [
+        model('zeta:latest', 120),
+        model('qwen3:8b', 30),
+        model('alpha:latest', 90)
+      ]),
+      server('2', [model('qwen3:8b', 20)]),
+      server('3', [model('qwen3:8b', 10)])
+    ]
+
+    expect(buildChatModelCatalog(servers).map(({ name }) => name)).toEqual([
+      'qwen3:8b',
+      'alpha:latest',
+      'zeta:latest'
+    ])
+  })
+
+  it('searches model names without changing popularity order', () => {
+    const catalog = buildChatModelCatalog([
+      server('1', [model('qwen3:8b'), model('qwen2.5:7b'), model('llama3.1:8b')]),
+      server('2', [model('qwen3:8b')])
+    ])
+
+    expect(searchChatModelCatalog(catalog, ' QWEN ').map(({ name }) => name))
+      .toEqual(['qwen3:8b', 'qwen2.5:7b'])
   })
 })

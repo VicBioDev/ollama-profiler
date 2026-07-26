@@ -1724,7 +1724,97 @@ textarea:focus,
   display: grid;
   grid-template-columns: minmax(240px, 1fr) auto;
   gap: 9px;
-  padding: 0 24px 18px;
+  padding: 0 24px;
+}
+
+.chat-model-search {
+  position: relative;
+}
+
+.chat-model-search > svg {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  z-index: 1;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.chat-model-search > input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px 0 35px;
+}
+
+.chat-model-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 12;
+  max-height: 248px;
+  overflow-y: auto;
+  background: rgba(17, 20, 25, 0.99);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+}
+
+.chat-model-suggestions > button,
+.chat-model-suggestions-empty {
+  width: 100%;
+  min-height: 48px;
+  padding: 9px 12px;
+  text-align: left;
+}
+
+.chat-model-suggestions > button {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-soft);
+  background: transparent;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.chat-model-suggestions > button:last-child {
+  border-bottom: 0;
+}
+
+.chat-model-suggestions > button:hover,
+.chat-model-suggestions > button:focus-visible {
+  color: var(--text);
+  background: var(--panel-bright);
+}
+
+.chat-model-suggestions > button > span {
+  overflow: hidden;
+  font: 11px "SFMono-Regular", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-model-suggestions > button > small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.chat-model-suggestions-empty {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.chat-model-order-note {
+  padding: 11px 24px 17px;
+  margin: 0;
+  color: #626c7b;
+  font-size: 10px;
+  line-height: 1.55;
   border-bottom: 1px solid var(--border);
 }
 
