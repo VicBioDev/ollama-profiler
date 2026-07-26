@@ -39,12 +39,20 @@ export function latestSuccess(model: ServerModel): BenchmarkResult | undefined {
   return model.benchmarks.find((result) => result.status === 'success')
 }
 
-export function bestServerSpeed(server: ServerRecord): number | undefined {
-  const values = server.models
+export function bestServerModel(server: ServerRecord): ServerModel | undefined {
+  return server.models
     .filter((model) => model.installed)
-    .map((model) => latestSuccess(model)?.tokensPerSecond)
-    .filter((value): value is number => value !== undefined)
-  return values.length > 0 ? Math.max(...values) : undefined
+    .reduce<ServerModel | undefined>((best, model) => {
+      const speed = latestSuccess(model)?.tokensPerSecond
+      if (speed === undefined) return best
+      const bestSpeed = best ? latestSuccess(best)?.tokensPerSecond : undefined
+      return bestSpeed === undefined || speed > bestSpeed ? model : best
+    }, undefined)
+}
+
+export function bestServerSpeed(server: ServerRecord): number | undefined {
+  const model = bestServerModel(server)
+  return model ? latestSuccess(model)?.tokensPerSecond : undefined
 }
 
 export function serverModelSpeed(

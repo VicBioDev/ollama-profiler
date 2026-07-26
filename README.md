@@ -51,8 +51,9 @@ with no Docker, database service, or background web service required.
   delete them in bulk or export CSV; exports include Endpoint, city/country
   Region, and TPS, using the selected model's speed when an exact model is
   filtered or each server's highest speed otherwise
-- Copy a server endpoint directly from any server list or its detail page, and
-  hover or focus a list's model count to inspect every installed model name
+- Copy a server endpoint directly from any server list or its detail page.
+  Hover or focus a list's model count to inspect every installed model name, or
+  its best speed to see which model produced that result
 - Paginate the server list at 50 servers per page while preserving selection
   across pages; Select All covers the complete filtered result set, not only the
   current page

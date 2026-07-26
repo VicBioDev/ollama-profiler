@@ -362,6 +362,12 @@ describe('state-driven interface', () => {
         speedModelName={selectedModel}
       />
     )
+    const unfilteredHtml = renderToStaticMarkup(
+      <ServerTable
+        onSelect={() => undefined}
+        servers={[slowerQwen]}
+      />
+    )
 
     expect(selectedModel).toBe('qwen3:32b')
     expect(sorted.map((candidate) => candidate.id)).toEqual(['server-2', 'server-1'])
@@ -369,6 +375,12 @@ describe('state-driven interface', () => {
     expect(html).toContain('42.0 tok/s')
     expect(html).toContain('18.0 tok/s')
     expect(html).not.toContain('120.0 tok/s')
+    expect(html).toContain('42.0 tok/s measured with qwen3:32b')
+    expect(html).toContain('role="tooltip"')
+    expect(unfilteredHtml).toContain(
+      '120.0 tok/s measured with llama3.1:8b'
+    )
+    expect(unfilteredHtml).toContain('Measured with')
   })
 
   it('shows copy actions beside server addresses and model names beside the list count', () => {

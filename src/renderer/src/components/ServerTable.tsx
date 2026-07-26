@@ -2,6 +2,7 @@ import { ChevronRight, MapPin } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import type { ServerRecord } from '@shared/types'
 import {
+  bestServerModel,
   bestServerSpeed,
   formatRelative,
   formatSpeed,
@@ -86,6 +87,19 @@ export function ServerTable({
             const selected = selectedIds?.has(server.id) ?? false
             const models = installedModels(server)
             const modelTooltipId = `server-models-${server.id}`
+            const speed = speedModelName
+              ? serverModelSpeed(server, speedModelName)
+              : bestServerSpeed(server)
+            const speedModel =
+              speed === undefined
+                ? undefined
+                : speedModelName
+                  ? models.find(
+                      (model) =>
+                        model.name.toLowerCase() === speedModelName.toLowerCase()
+                    )
+                  : bestServerModel(server)
+            const speedTooltipId = `server-speed-model-${server.id}`
             return (
               <tr
                 className={selected ? 'selected-row' : undefined}
@@ -152,10 +166,25 @@ export function ServerTable({
                   </span>
                 </td>
                 <td className="mono">
-                  {formatSpeed(
-                    speedModelName
-                      ? serverModelSpeed(server, speedModelName)
-                      : bestServerSpeed(server)
+                  {speedModel ? (
+                    <span
+                      aria-describedby={speedTooltipId}
+                      aria-label={`${formatSpeed(speed)} measured with ${speedModel.name}`}
+                      className="speed-result"
+                      tabIndex={0}
+                    >
+                      {formatSpeed(speed)}
+                      <span
+                        className="speed-model-tooltip"
+                        id={speedTooltipId}
+                        role="tooltip"
+                      >
+                        <strong>Measured with</strong>
+                        <code>{speedModel.name}</code>
+                      </span>
+                    </span>
+                  ) : (
+                    formatSpeed(speed)
                   )}
                 </td>
                 <td>{formatRelative(server.lastOnlineAt)}</td>
