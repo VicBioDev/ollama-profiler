@@ -248,6 +248,123 @@ impl ProfilerEngine {
         Ok(settings)
     }
 
+    pub async fn chat_models(&self, request: ChatRequest) -> AppResult<ChatResponse> {
+        let prompt = request.prompt.trim().to_string();
+        if prompt.is_empty() {
+            return Err(AppError::message("Enter a message before sending"));
+        }
+        if prompt.chars().count() > 20_000 {
+            return Err(AppError::message(
+                "Chat messages are limited to 20,000 characters",
+            ));
+        }
+        if request.targets.is_empty() || request.targets.len() > 4 {
+            return Err(AppError::message("Choose between one and four models"));
+        }
+
+        let server_ids: HashSet<&str> = request
+            .targets
+            .iter()
+            .map(|target| target.server_id.as_str())
+            .collect();
+        if server_ids.len() != request.targets.len() {
+            return Err(AppError::message(
+                "Comparison models must run on different servers",
+            ));
+        }
+        let model_names: HashSet<String> = request
+            .targets
+            .iter()
+            .map(|target| target.model_name.trim().to_ascii_lowercase())
+            .collect();
+        if model_names.len() != request.targets.len() {
+            return Err(AppError::message("Choose each model only once"));
+        }
+
+        let snapshot = self.get_snapshot()?;
+        let mut prepared = Vec::with_capacity(request.targets.len());
+        for target in request.targets {
+            let server = snapshot
+                .servers
+                .iter()
+                .find(|server| server.id == target.server_id)
+                .ok_or_else(|| AppError::message("A selected server is no longer available"))?;
+            if server.status != ServerStatus::Online {
+                return Err(AppError::message(format!(
+                    "{} is no longer online",
+                    server.endpoint
+                )));
+            }
+            if !server.benchmark_approved {
+                return Err(AppError::message(format!(
+                    "Generation is not enabled for {}",
+                    server.endpoint
+                )));
+            }
+            let model = server
+                .models
+                .iter()
+                .find(|model| model.name.eq_ignore_ascii_case(target.model_name.trim()))
+                .filter(|model| is_benchmarkable_local_model(model))
+                .ok_or_else(|| {
+                    AppError::message(format!(
+                        "{} is not available for chat on {}",
+                        target.model_name, server.endpoint
+                    ))
+                })?;
+            prepared.push((
+                server.id.clone(),
+                server.endpoint.clone(),
+                model.name.clone(),
+            ));
+        }
+
+        let settings = snapshot.settings;
+        let mut results = stream::iter(prepared.into_iter().enumerate())
+            .map(|(index, (server_id, endpoint, model_name))| {
+                let engine = self.clone();
+                let prompt = prompt.clone();
+                let settings = settings.clone();
+                async move {
+                    let lock = engine.server_lock(&server_id).await;
+                    let _guard = lock.lock().await;
+                    let started = Instant::now();
+                    let result = OllamaClient::new(endpoint.clone(), settings)
+                        .chat(&model_name, &prompt)
+                        .await;
+                    let elapsed_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+                    let reply = match result {
+                        Ok(content) => ChatModelReply {
+                            server_id,
+                            endpoint,
+                            model_name,
+                            elapsed_ms,
+                            content: Some(content),
+                            error_code: None,
+                            error_message: None,
+                        },
+                        Err(error) => ChatModelReply {
+                            server_id,
+                            endpoint,
+                            model_name,
+                            elapsed_ms,
+                            content: None,
+                            error_code: Some(error.code),
+                            error_message: Some(error.message),
+                        },
+                    };
+                    (index, reply)
+                }
+            })
+            .buffer_unordered(4)
+            .collect::<Vec<_>>()
+            .await;
+        results.sort_by_key(|(index, _)| *index);
+        Ok(ChatResponse {
+            results: results.into_iter().map(|(_, reply)| reply).collect(),
+        })
+    }
+
     pub fn remove_server(&self, server_id: String) -> AppResult<()> {
         self.remove_servers(vec![server_id])
     }

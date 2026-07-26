@@ -30,7 +30,9 @@ export function Sidebar({
     : NAV_ITEMS.filter((item) => item.id !== 'settings')
   const visibleItems = hasServers
     ? availableItems
-    : availableItems.filter((item) => item.id !== 'servers')
+    : availableItems.filter(
+        (item) => item.id !== 'servers' && item.id !== 'chat'
+      )
   return (
     <aside className="sidebar">
       <div className="brand">

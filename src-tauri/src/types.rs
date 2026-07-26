@@ -367,6 +367,41 @@ pub struct ServerExportResult {
     pub count: usize,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatModelTarget {
+    pub server_id: String,
+    pub model_name: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatRequest {
+    pub prompt: String,
+    pub targets: Vec<ChatModelTarget>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatModelReply {
+    pub server_id: String,
+    pub endpoint: String,
+    pub model_name: String,
+    pub elapsed_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatResponse {
+    pub results: Vec<ChatModelReply>,
+}
+
 #[derive(Clone, Debug)]
 pub struct OllamaModelDetails {
     pub name: String,

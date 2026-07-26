@@ -2,12 +2,14 @@ import {
   Gauge,
   Import,
   LayoutDashboard,
+  MessagesSquare,
   Server,
   Settings
 } from 'lucide-react'
 
 export const NAV_ITEMS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'chat', label: 'Chat', icon: MessagesSquare },
   { id: 'servers', label: 'Servers', icon: Server },
   { id: 'imports', label: 'Import', icon: Import },
   { id: 'settings', label: 'Settings', icon: Settings },

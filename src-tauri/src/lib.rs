@@ -14,8 +14,8 @@ use store::{ProfilerStore, migrate_legacy_data};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, State};
 use types::{
-    AppSettings, AppSettingsPatch, ImportCommitOptions, ImportCommitResult, ImportPreview,
-    ProfilerSnapshot, ServerExportOptions, ServerExportResult,
+    AppSettings, AppSettingsPatch, ChatRequest, ChatResponse, ImportCommitOptions,
+    ImportCommitResult, ImportPreview, ProfilerSnapshot, ServerExportOptions, ServerExportResult,
 };
 
 type CommandResult<T> = Result<T, String>;
@@ -89,6 +89,14 @@ fn update_settings(
 }
 
 #[tauri::command]
+async fn chat_models(
+    engine: State<'_, ProfilerEngine>,
+    request: ChatRequest,
+) -> CommandResult<ChatResponse> {
+    engine.chat_models(request).await.map_err(command_error)
+}
+
+#[tauri::command]
 fn remove_server(engine: State<'_, ProfilerEngine>, server_id: String) -> CommandResult<()> {
     engine.remove_server(server_id).map_err(command_error)
 }
@@ -126,8 +134,11 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
     let servers = MenuItemBuilder::with_id("servers", "Servers")
         .accelerator("CmdOrCtrl+2")
         .build(app)?;
-    let local = MenuItemBuilder::with_id("local", "Local Discovery")
+    let chat = MenuItemBuilder::with_id("chat", "Chat")
         .accelerator("CmdOrCtrl+3")
+        .build(app)?;
+    let local = MenuItemBuilder::with_id("local", "Local Discovery")
+        .accelerator("CmdOrCtrl+4")
         .build(app)?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
@@ -145,7 +156,7 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
         .select_all()
         .build()?;
     let view_menu = SubmenuBuilder::new(app, "View")
-        .items(&[&overview, &servers, &local])
+        .items(&[&overview, &servers, &chat, &local])
         .separator()
         .fullscreen()
         .build()?;
@@ -188,6 +199,7 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
             "settings" => Some("settings"),
             "overview" => Some("overview"),
             "servers" => Some("servers"),
+            "chat" => Some("chat"),
             "local" => Some("local"),
             _ => None,
         };
@@ -229,6 +241,7 @@ pub fn run() {
             profile_all_servers,
             set_benchmark_approval,
             update_settings,
+            chat_models,
             remove_server,
             remove_servers,
             export_servers

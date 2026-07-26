@@ -1667,6 +1667,12 @@ textarea:focus,
   border-color: rgba(255, 125, 134, 0.18);
 }
 
+.notice.warning {
+  color: var(--yellow);
+  background: rgba(255, 206, 107, 0.06);
+  border-color: rgba(255, 206, 107, 0.16);
+}
+
 .global-error {
   position: sticky;
   top: 68px;
@@ -1693,6 +1699,211 @@ textarea:focus,
 
 .settings-card {
   padding-bottom: 19px;
+}
+
+.chat-empty-state .focused-mark,
+.chat-page .safety-card {
+  flex: 0 0 auto;
+}
+
+.chat-composer {
+  overflow: visible;
+}
+
+.chat-model-picker {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 9px;
+  padding: 0 24px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-route-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+  gap: 10px;
+  padding: 20px 24px 0;
+}
+
+.chat-route-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 77px;
+  padding: 14px 42px 14px 15px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+}
+
+.chat-route-card strong,
+.chat-route-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-route-card strong {
+  font: 500 12px "SFMono-Regular", monospace;
+}
+
+.chat-route-card small {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.chat-route-card > span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--green);
+  font: 10px "SFMono-Regular", monospace;
+  white-space: nowrap;
+}
+
+.chat-route-card > button {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 6px;
+}
+
+.chat-route-card > button:hover {
+  color: var(--text);
+  background: var(--panel-bright);
+}
+
+.chat-routing-note {
+  padding: 0 24px;
+  margin: 11px 0 0;
+  color: #626c7b;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.chat-prompt {
+  display: grid;
+  gap: 7px;
+  padding: 22px 24px 0;
+}
+
+.chat-prompt > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.chat-prompt textarea {
+  min-height: 150px;
+  padding: 13px 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.chat-send-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 13px 24px 22px;
+}
+
+.chat-send-row > small {
+  color: var(--muted);
+  font: 9px "SFMono-Regular", monospace;
+}
+
+.chat-notice {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+
+.chat-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.chat-results.single {
+  grid-template-columns: 1fr;
+}
+
+.chat-result-card > header {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-result-card > header strong,
+.chat-result-card > header small {
+  display: block;
+}
+
+.chat-result-card > header strong {
+  font: 500 12px "SFMono-Regular", monospace;
+}
+
+.chat-result-card > header small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.chat-result-card > header > span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--muted);
+  font: 9px "SFMono-Regular", monospace;
+  white-space: nowrap;
+}
+
+.chat-result-card > p {
+  min-height: 100px;
+  padding: 20px 18px 24px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-result-error {
+  display: flex;
+  gap: 10px;
+  min-height: 100px;
+  padding: 20px 18px 24px;
+  color: var(--red);
+}
+
+.chat-result-error strong,
+.chat-result-error small {
+  display: block;
+}
+
+.chat-result-error strong {
+  font-size: 11px;
+}
+
+.chat-result-error small {
+  margin-top: 6px;
+  color: #aa7479;
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .settings-card.full-width {
@@ -1863,7 +2074,8 @@ textarea:focus,
   }
 
   .import-source-grid,
-  .settings-grid {
+  .settings-grid,
+  .chat-results {
     grid-template-columns: 1fr;
   }
 

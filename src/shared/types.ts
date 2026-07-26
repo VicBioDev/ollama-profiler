@@ -143,6 +143,28 @@ export interface ServerExportResult {
   count: number
 }
 
+export interface ChatModelTarget {
+  serverId: string
+  modelName: string
+}
+
+export interface ChatRequest {
+  prompt: string
+  targets: ChatModelTarget[]
+}
+
+export interface ChatModelReply extends ChatModelTarget {
+  endpoint: string
+  elapsedMs: number
+  content?: string
+  errorCode?: string
+  errorMessage?: string
+}
+
+export interface ChatResponse {
+  results: ChatModelReply[]
+}
+
 export interface ServerFilter {
   query?: string
   model?: string
@@ -151,6 +173,7 @@ export interface ServerFilter {
 
 export type DesktopNavigationTarget =
   | 'overview'
+  | 'chat'
   | 'servers'
   | 'imports'
   | 'settings'
@@ -176,4 +199,5 @@ export interface DesktopApi {
   exportServers: (
     options: ServerExportOptions
   ) => Promise<ServerExportResult | null>
+  chatModels: (request: ChatRequest) => Promise<ChatResponse>
 }

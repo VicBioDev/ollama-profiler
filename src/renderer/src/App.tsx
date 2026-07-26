@@ -11,6 +11,7 @@ import { LocalDiscoveryPage } from './pages/LocalDiscoveryPage'
 import { ServerDetailPage } from './pages/ServerDetailPage'
 import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ChatPage } from './pages/ChatPage'
 import { isLocalDiscoveryServer } from './hooks/useLocalDiscovery'
 import { confirmBenchmarkContinuation } from '@shared/job-utils'
 
@@ -124,6 +125,12 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
               onExportServers={actions.exportServers}
               onNavigateToImport={() => navigate('imports')}
               onSelectServer={setSelectedServerId}
+              servers={snapshot.servers}
+            />
+          ) : page === 'chat' ? (
+            <ChatPage
+              onChat={actions.chatModels}
+              onShowServers={() => navigate('servers')}
               servers={snapshot.servers}
             />
           ) : page === 'imports' ? (

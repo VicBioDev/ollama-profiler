@@ -5,6 +5,8 @@ import { platform } from '@tauri-apps/plugin-os'
 import { createServerExportFileName } from '@shared/server-export'
 import type {
   AppSettings,
+  ChatRequest,
+  ChatResponse,
   DesktopApi,
   DesktopNavigationTarget,
   ImportCommitOptions,
@@ -65,7 +67,9 @@ export function createDesktopApi(): DesktopApi {
       return filePath
         ? invoke<ServerExportResult>('export_servers', { options, filePath })
         : null
-    }
+    },
+    chatModels: (request: ChatRequest) =>
+      invoke<ChatResponse>('chat_models', { request })
   }
 }
 

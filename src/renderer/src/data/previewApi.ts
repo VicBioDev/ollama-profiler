@@ -239,6 +239,20 @@ export function createPreviewApi(): DesktopApi {
     exportServers: async (options) => ({
       filePath: 'Ollama Profiler preview.csv',
       count: options.serverIds.length
+    }),
+    chatModels: async ({ targets }) => ({
+      results: targets.map((target, index) => {
+        const server = servers.find(({ id }) => id === target.serverId)
+        return {
+          ...target,
+          endpoint: server?.endpoint ?? 'Unavailable server',
+          elapsedMs: 1_240 + index * 380,
+          content:
+            index === 0
+              ? 'A stateless chat request contains only the message you just sent.'
+              : 'This response ran independently on a different Ollama server.'
+        }
+      })
     })
   }
 }

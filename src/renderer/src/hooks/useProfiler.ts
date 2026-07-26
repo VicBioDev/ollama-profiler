@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import type {
   AppSettings,
+  ChatRequest,
+  ChatResponse,
   ImportCommitOptions,
   ImportPreview,
   ProfilerSnapshot,
@@ -22,6 +24,7 @@ interface ProfilerActions {
   exportServers: (
     options: ServerExportOptions
   ) => Promise<ServerExportResult | null>
+  chatModels: (request: ChatRequest) => Promise<ChatResponse>
   clearError: () => void
 }
 
@@ -85,6 +88,8 @@ export function useProfiler(): UseProfilerResult {
     },
     exportServers: (options) =>
       run(() => window.ollamaProfiler.exportServers(options)),
+    chatModels: (request) =>
+      run(() => window.ollamaProfiler.chatModels(request)),
     clearError: () => setError(undefined)
   }
 

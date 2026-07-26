@@ -124,12 +124,7 @@ impl OllamaClient {
     }
 
     pub async fn benchmark(&self, model: &str) -> ClientResult<BenchmarkResult> {
-        if model.is_empty() || model.len() > 512 || model.contains('\0') {
-            return Err(OllamaClientError::new(
-                "invalid_model",
-                "Invalid model name",
-            ));
-        }
+        validate_model_name(model)?;
         let started_at = Utc::now().to_rfc3339();
         let started = Instant::now();
         let target = self.target_url("/api/generate")?;
@@ -229,17 +224,55 @@ impl OllamaClient {
         })
     }
 
+    pub async fn chat(&self, model: &str, prompt: &str) -> ClientResult<String> {
+        validate_model_name(model)?;
+        let payload = self
+            .request_json_with_timeout(
+                "/api/chat",
+                Some(json!({
+                    "model": model,
+                    "messages": [{ "role": "user", "content": prompt }],
+                    "stream": false
+                })),
+                self.settings.benchmark_timeout_ms,
+            )
+            .await?;
+        if let Some(error) = payload.get("error") {
+            return Err(OllamaClientError::new("ollama_error", text_value(error)));
+        }
+        payload
+            .get("message")
+            .and_then(Value::as_object)
+            .and_then(|message| string_value(message.get("content")))
+            .ok_or_else(|| {
+                OllamaClientError::new(
+                    "invalid_chat_response",
+                    "Ollama did not return a chat message",
+                )
+            })
+    }
+
     async fn request_json(
         &self,
         path: &str,
         body: Option<Value>,
+    ) -> ClientResult<Map<String, Value>> {
+        self.request_json_with_timeout(path, body, self.settings.request_timeout_ms)
+            .await
+    }
+
+    async fn request_json_with_timeout(
+        &self,
+        path: &str,
+        body: Option<Value>,
+        timeout_ms: u64,
     ) -> ClientResult<Map<String, Value>> {
         let target = self.target_url(path)?;
         let bytes = request_bytes(
             target,
             body,
             self.settings.connect_timeout_ms,
-            self.settings.request_timeout_ms,
+            timeout_ms,
             self.settings.max_response_bytes,
             self.settings.allow_private_networks,
         )
@@ -257,6 +290,16 @@ impl OllamaClient {
             .and_then(|url| url.join(path.trim_start_matches('/')))
             .map_err(|_| OllamaClientError::new("invalid_endpoint", "Invalid Ollama endpoint"))
     }
+}
+
+fn validate_model_name(model: &str) -> ClientResult<()> {
+    if model.is_empty() || model.len() > 512 || model.contains('\0') {
+        return Err(OllamaClientError::new(
+            "invalid_model",
+            "Invalid model name",
+        ));
+    }
+    Ok(())
 }
 
 async fn request_bytes(
