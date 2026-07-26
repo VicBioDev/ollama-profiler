@@ -49,6 +49,15 @@ export function ChatPage({
     ({ name }) => !selectedKeys.has(name.toLowerCase())
   )
   const matchingChoices = searchChatModelCatalog(availableChoices, modelQuery)
+  const preferredChoice =
+    availableChoices.find(
+      ({ name }) => name.toLowerCase() === modelQuery.trim().toLowerCase()
+    ) ?? matchingChoices[0]
+  const switchesCurrentModel = Boolean(
+    preferredChoice &&
+    selectedModelNames.length === 1 &&
+    !routeChatModels(servers, [...selectedModelNames, preferredChoice.name])
+  )
   const route = useMemo(
     () => routeChatModels(servers, selectedModelNames),
     [selectedModelNames, servers]
@@ -61,8 +70,11 @@ export function ChatPage({
     )
     const nextName = exactChoice?.name || matchingChoices[0]?.name
     if (!nextName || selectedModelNames.length >= 4) return
-    const nextSelection = [...selectedModelNames, nextName]
-    if (!routeChatModels(servers, nextSelection)) {
+    let nextSelection = [...selectedModelNames, nextName]
+    const nextRoute = routeChatModels(servers, nextSelection)
+    if (selectedModelNames.length === 1 && !nextRoute) {
+      nextSelection = [nextName]
+    } else if (!nextRoute) {
       setNotice(
         'That combination cannot run on separate servers. Choose a model available on another generation-enabled server.'
       )
@@ -212,6 +224,9 @@ export function ChatPage({
                     <button
                       aria-selected="false"
                       key={choice.name}
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                      }}
                       onClick={() => addModel(choice.name)}
                       role="option"
                       type="button"
@@ -237,7 +252,7 @@ export function ChatPage({
             onClick={() => addModel()}
             type="button"
           >
-            Add model
+            {switchesCurrentModel ? 'Switch model' : 'Add model'}
           </button>
         </div>
         <p className="chat-model-order-note">

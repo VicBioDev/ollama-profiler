@@ -61,6 +61,88 @@ describe('chat model picker', () => {
     expect(container.textContent).toContain('zeta:latest')
     expect(search.value).toBe('')
   })
+
+  it('keeps the suggestion mounted until a desktop WebView click selects it', () => {
+    act(() => {
+      root.render(
+        <ChatPage
+          onChat={async () => ({ results: [] })}
+          onShowServers={() => undefined}
+          servers={[
+            server('1', ['qwen3:8b', 'zeta:latest']),
+            server('2', ['qwen3:8b'])
+          ]}
+        />
+      )
+    })
+
+    const search = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search chat models"]'
+    )
+    if (!search) throw new Error('Chat model search was not rendered')
+    act(() => {
+      search.focus()
+      setInputValue(search, 'zet')
+    })
+
+    const match = container.querySelector<HTMLButtonElement>(
+      '#chat-model-suggestions [role="option"]'
+    )
+    if (!match) throw new Error('Matching model option was not rendered')
+
+    act(() => {
+      const mouseDownAccepted = match.dispatchEvent(
+        new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          detail: 1
+        })
+      )
+      if (mouseDownAccepted) search.blur()
+      match.dispatchEvent(
+        new MouseEvent('mouseup', { bubbles: true, cancelable: true, detail: 1 })
+      )
+      match.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })
+      )
+    })
+
+    expect(container.textContent).toContain('2/4 selected')
+    expect(container.textContent).toContain('zeta:latest')
+  })
+
+  it('switches the sole selected model when both choices only run on one server', () => {
+    act(() => {
+      root.render(
+        <ChatPage
+          onChat={async () => ({ results: [] })}
+          onShowServers={() => undefined}
+          servers={[server('1', ['alpha:latest', 'zeta:latest'])]}
+        />
+      )
+    })
+
+    const search = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search chat models"]'
+    )
+    if (!search) throw new Error('Chat model search was not rendered')
+    act(() => {
+      search.focus()
+      setInputValue(search, 'zet')
+    })
+
+    expect(findButton('Switch model')).toBeDefined()
+
+    const match = container.querySelector<HTMLButtonElement>(
+      '#chat-model-suggestions [role="option"]'
+    )
+    if (!match) throw new Error('Matching model option was not rendered')
+    act(() => match.click())
+
+    expect(container.textContent).toContain('1/4 selected')
+    expect(container.textContent).toContain('zeta:latest')
+    expect(container.textContent).not.toContain('alpha:latest')
+  })
 })
 
 function server(id: string, modelNames: string[]): ServerRecord {
@@ -92,6 +174,14 @@ function suggestionNames(): string[] {
       '#chat-model-suggestions [role="option"]'
     )
   ].map((option) => option.querySelector('span')?.textContent ?? '')
+}
+
+function findButton(label: string): HTMLButtonElement {
+  const button = [...container.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === label
+  )
+  if (!button) throw new Error(`${label} button was not rendered`)
+  return button
 }
 
 function setInputValue(input: HTMLInputElement, value: string): void {
