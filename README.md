@@ -44,7 +44,9 @@ with no Docker, database service, or background web service required.
   benchmark history locally for 90 days
 - Search models with suggestions and filter servers by status and country-level
   region; after selecting an exact model, the speed column shows its name and
-  displays and sorts only that model's latest successful speed
+  displays and sorts only that model's latest successful speed. Search terms,
+  filters, and the current result page survive navigation while the app remains
+  open, but reset after the app exits
 - Search the stateless Chat model picker by name; available models are ranked by
   how many eligible servers have them installed, with alphabetical tie-breaking.
   Chat keeps the current test when navigating between pages while the app remains

@@ -6,7 +6,13 @@ import {
   Trash2,
   X
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
 import type {
   ServerExportOptions,
   ServerExportResult,
@@ -31,6 +37,8 @@ interface ServersPageProps {
   readonly onExportServers: (
     options: ServerExportOptions
   ) => Promise<ServerExportResult | null>
+  readonly onSearchStateChange?: Dispatch<SetStateAction<ServersSearchState>>
+  readonly searchState?: ServersSearchState
 }
 
 export interface ModelSuggestion {
@@ -40,19 +48,40 @@ export interface ModelSuggestion {
 
 export const SERVER_PAGE_SIZE = 50
 
+export interface ServersSearchState {
+  modelQuery: string
+  status: ServerStatus | 'all'
+  region: string
+  page: number
+}
+
+export function createServersSearchState(): ServersSearchState {
+  return {
+    modelQuery: '',
+    status: 'all',
+    region: '',
+    page: 1
+  }
+}
+
 export function ServersPage({
   servers,
   busy,
   onDeleteServers,
   onExportServers,
   onNavigateToImport,
-  onSelectServer
+  onSearchStateChange,
+  onSelectServer,
+  searchState
 }: Readonly<ServersPageProps>): React.JSX.Element {
-  const [modelQuery, setModelQuery] = useState('')
+  const [localSearchState, setLocalSearchState] = useState(
+    createServersSearchState
+  )
+  const activeSearchState = searchState ?? localSearchState
+  const setActiveSearchState =
+    onSearchStateChange ?? setLocalSearchState
+  const { modelQuery, status, region, page } = activeSearchState
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
-  const [status, setStatus] = useState<ServerStatus | 'all'>('all')
-  const [region, setRegion] = useState('')
-  const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [notice, setNotice] = useState<string>()
 
@@ -96,8 +125,12 @@ export function ServersPage({
   const filteredIdKey = filtered.map((server) => server.id).join('\0')
 
   useEffect(() => {
-    if (page !== pagination.page) setPage(pagination.page)
-  }, [page, pagination.page])
+    if (page === pagination.page) return
+    setActiveSearchState((current) => ({
+      ...current,
+      page: pagination.page
+    }))
+  }, [page, pagination.page, setActiveSearchState])
 
   useEffect(() => {
     const visibleIds = new Set(filtered.map((server) => server.id))
@@ -182,8 +215,11 @@ export function ServersPage({
               aria-label="Search discovered models"
               onBlur={() => setSuggestionsOpen(false)}
               onChange={(event) => {
-                setModelQuery(event.target.value)
-                setPage(1)
+                setActiveSearchState((current) => ({
+                  ...current,
+                  modelQuery: event.target.value,
+                  page: 1
+                }))
                 setSuggestionsOpen(true)
               }}
               onFocus={() => setSuggestionsOpen(true)}
@@ -203,8 +239,11 @@ export function ServersPage({
                       aria-selected={suggestion.name === modelQuery}
                       key={suggestion.name}
                       onClick={() => {
-                        setModelQuery(suggestion.name)
-                        setPage(1)
+                        setActiveSearchState((current) => ({
+                          ...current,
+                          modelQuery: suggestion.name,
+                          page: 1
+                        }))
                         setSuggestionsOpen(false)
                       }}
                       onMouseDown={(event) => event.preventDefault()}
@@ -231,8 +270,11 @@ export function ServersPage({
           <select
             aria-label="Server status"
             onChange={(event) => {
-              setStatus(event.target.value as ServerStatus | 'all')
-              setPage(1)
+              setActiveSearchState((current) => ({
+                ...current,
+                status: event.target.value as ServerStatus | 'all',
+                page: 1
+              }))
             }}
             value={status}
           >
@@ -245,8 +287,11 @@ export function ServersPage({
           <select
             aria-label="Region (country)"
             onChange={(event) => {
-              setRegion(event.target.value)
-              setPage(1)
+              setActiveSearchState((current) => ({
+                ...current,
+                region: event.target.value,
+                page: 1
+              }))
             }}
             value={region}
           >
@@ -332,7 +377,12 @@ export function ServersPage({
                 aria-label="Previous server page"
                 className="icon-button"
                 disabled={pagination.page === 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                onClick={() =>
+                  setActiveSearchState((current) => ({
+                    ...current,
+                    page: Math.max(1, current.page - 1)
+                  }))
+                }
                 type="button"
               >
                 <ChevronLeft size={15} />
@@ -345,9 +395,10 @@ export function ServersPage({
                 className="icon-button"
                 disabled={pagination.page === pagination.totalPages}
                 onClick={() =>
-                  setPage((current) =>
-                    Math.min(pagination.totalPages, current + 1)
-                  )
+                  setActiveSearchState((current) => ({
+                    ...current,
+                    page: Math.min(pagination.totalPages, current.page + 1)
+                  }))
                 }
                 type="button"
               >

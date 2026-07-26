@@ -9,7 +9,10 @@ import { ImportPage } from './pages/ImportPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { LocalDiscoveryPage } from './pages/LocalDiscoveryPage'
 import { ServerDetailPage } from './pages/ServerDetailPage'
-import { ServersPage } from './pages/ServersPage'
+import {
+  ServersPage,
+  createServersSearchState
+} from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import {
   ChatPage,
@@ -28,6 +31,9 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [chatSessionState, setChatSessionState] = useState(
     createChatSessionState
+  )
+  const [serversSearchState, setServersSearchState] = useState(
+    createServersSearchState
   )
   const selectedServer = useMemo(
     () => snapshot?.servers.find((server) => server.id === selectedServerId),
@@ -136,7 +142,9 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
               onDeleteServers={actions.removeServers}
               onExportServers={actions.exportServers}
               onNavigateToImport={() => navigate('imports')}
+              onSearchStateChange={setServersSearchState}
               onSelectServer={setSelectedServerId}
+              searchState={serversSearchState}
               servers={snapshot.servers}
             />
           ) : page === 'chat' ? (
