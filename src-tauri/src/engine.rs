@@ -137,7 +137,7 @@ impl ProfilerEngine {
         })?;
         self.import_sessions()?.remove(&options.preview_id);
         self.broadcast();
-        let _ = self.profile_all_servers();
+        let _ = self.profile_all_servers(false);
         Ok(result)
     }
 
@@ -174,17 +174,51 @@ impl ProfilerEngine {
         Ok(job_id)
     }
 
-    pub fn profile_all_servers(&self) -> AppResult<String> {
+    pub fn profile_all_servers(&self, resume_incomplete: bool) -> AppResult<String> {
         if let Some(active) = self.find_active_job(JobKind::Scan)? {
             return Ok(active);
         }
         if let Some(active) = self.find_active_job(JobKind::Benchmark)? {
             return Ok(active);
         }
-        if self.get_snapshot()?.servers.is_empty() {
+        let snapshot = self.get_snapshot()?;
+        if snapshot.servers.is_empty() {
             return Err(AppError::message(
                 "Add at least one server before starting a scan and benchmark",
             ));
+        }
+        if resume_incomplete && let Some(previous) = latest_incomplete_benchmark(&snapshot).cloned()
+        {
+            let benchmark_started_at = previous
+                .benchmark_started_at
+                .unwrap_or_else(|| previous.created_at.clone());
+            let targets: HashSet<String> = if previous.target_server_ids.is_empty() {
+                snapshot
+                    .servers
+                    .iter()
+                    .map(|server| server.id.clone())
+                    .collect()
+            } else {
+                previous.target_server_ids.into_iter().collect()
+            };
+            let remaining = snapshot
+                .servers
+                .iter()
+                .filter(|server| {
+                    targets.contains(&server.id)
+                        && server.models.iter().any(|model| {
+                            is_benchmarkable_local_model(model)
+                                && !was_benchmarked_since(model, &benchmark_started_at)
+                        })
+                })
+                .map(|server| server.id.clone())
+                .collect();
+            return self.queue_benchmark(
+                remaining,
+                false,
+                Some(benchmark_started_at),
+                "Continue interrupted benchmarks".into(),
+            );
         }
         self.queue_scan(
             None,
@@ -547,6 +581,7 @@ impl ProfilerEngine {
             let _ = self.queue_benchmark(
                 ready,
                 options.force_benchmark,
+                None,
                 "Benchmark all approved local models".into(),
             );
         }
@@ -656,21 +691,39 @@ impl ProfilerEngine {
         &self,
         server_ids: Vec<String>,
         force: bool,
+        resume_started_at: Option<String>,
         label: String,
     ) -> AppResult<String> {
         if let Some(active) = self.find_active_job(JobKind::Benchmark)? {
             return Ok(active);
         }
-        let job_id = self.create_job(JobKind::Benchmark, label, server_ids.len())?;
+        let benchmark_started_at = resume_started_at
+            .clone()
+            .unwrap_or_else(|| Utc::now().to_rfc3339());
+        let job_id = self.create_job_with_context(
+            JobKind::Benchmark,
+            label,
+            server_ids.len(),
+            server_ids.clone(),
+            Some(benchmark_started_at),
+        )?;
         let engine = self.clone();
         let task_id = job_id.clone();
         tauri::async_runtime::spawn(async move {
-            engine.run_benchmark_job(task_id, server_ids, force).await;
+            engine
+                .run_benchmark_job(task_id, server_ids, force, resume_started_at)
+                .await;
         });
         Ok(job_id)
     }
 
-    async fn run_benchmark_job(&self, job_id: String, server_ids: Vec<String>, force: bool) {
+    async fn run_benchmark_job(
+        &self,
+        job_id: String,
+        server_ids: Vec<String>,
+        force: bool,
+        resume_started_at: Option<String>,
+    ) {
         if self.set_job_running(&job_id).is_err() {
             return;
         }
@@ -682,13 +735,16 @@ impl ProfilerEngine {
             .map(|server_id| {
                 let engine = self.clone();
                 let job_id = job_id.clone();
+                let resume_started_at = resume_started_at.clone();
                 async move {
                     if engine.inner.shutting_down.load(Ordering::Relaxed) {
                         return;
                     }
                     let lock = engine.server_lock(&server_id).await;
                     let _guard = lock.lock().await;
-                    engine.benchmark_one_server(&server_id, force).await;
+                    engine
+                        .benchmark_one_server(&server_id, force, resume_started_at.as_deref())
+                        .await;
                     let _ = engine.increment_job(&job_id);
                 }
             })
@@ -698,7 +754,12 @@ impl ProfilerEngine {
         let _ = self.finish_job(&job_id, JobStatus::Completed, None, None);
     }
 
-    async fn benchmark_one_server(&self, server_id: &str, force: bool) {
+    async fn benchmark_one_server(
+        &self,
+        server_id: &str,
+        force: bool,
+        resume_started_at: Option<&str>,
+    ) {
         let snapshot = match self.get_snapshot() {
             Ok(snapshot) => snapshot,
             Err(_) => return,
@@ -719,7 +780,10 @@ impl ProfilerEngine {
             .iter()
             .filter(|model| {
                 is_benchmarkable_local_model(model)
-                    && (force || is_benchmark_due(model, &server, Utc::now()))
+                    && resume_started_at.map_or_else(
+                        || force || is_benchmark_due(model, &server, Utc::now()),
+                        |started_at| !was_benchmarked_since(model, started_at),
+                    )
             })
             .cloned()
             .collect();
@@ -808,7 +872,8 @@ impl ProfilerEngine {
             .map(|server| server.id.clone())
             .collect();
         if !due.is_empty() {
-            let _ = self.queue_benchmark(due, false, "Scheduled local model benchmarks".into());
+            let _ =
+                self.queue_benchmark(due, false, None, "Scheduled local model benchmarks".into());
         }
         Ok(())
     }
@@ -837,6 +902,17 @@ impl ProfilerEngine {
     }
 
     fn create_job(&self, kind: JobKind, label: String, total: usize) -> AppResult<String> {
+        self.create_job_with_context(kind, label, total, Vec::new(), None)
+    }
+
+    fn create_job_with_context(
+        &self,
+        kind: JobKind,
+        label: String,
+        total: usize,
+        target_server_ids: Vec<String>,
+        benchmark_started_at: Option<String>,
+    ) -> AppResult<String> {
         let now = Utc::now().to_rfc3339();
         let id = Uuid::new_v4().to_string();
         let job = ProfilerJob {
@@ -848,6 +924,8 @@ impl ProfilerEngine {
             total,
             created_at: now.clone(),
             updated_at: now,
+            target_server_ids,
+            benchmark_started_at,
             summary: None,
             error_message: None,
         };
@@ -980,6 +1058,28 @@ impl ProfilerEngine {
     }
 }
 
+fn latest_incomplete_benchmark(snapshot: &ProfilerSnapshot) -> Option<&ProfilerJob> {
+    snapshot
+        .jobs
+        .iter()
+        .find(|job| job.kind == JobKind::Benchmark)
+        .filter(|job| {
+            matches!(job.status, JobStatus::Cancelled | JobStatus::Failed)
+                && job.completed < job.total
+        })
+}
+
+fn was_benchmarked_since(model: &ServerModel, started_at: &str) -> bool {
+    let Ok(started_at) = chrono::DateTime::parse_from_rfc3339(started_at) else {
+        return false;
+    };
+    model.benchmarks.iter().any(|result| {
+        chrono::DateTime::parse_from_rfc3339(&result.finished_at)
+            .map(|finished_at| finished_at >= started_at)
+            .unwrap_or(false)
+    })
+}
+
 fn apply_candidate(server: &mut ServerRecord, candidate: &DiscoveryCandidate, now: &str) {
     merge_discovery_source(server, candidate.source.clone());
     server.ip = candidate.ip.clone().or(server.ip.take());
@@ -1095,5 +1195,87 @@ fn failed_benchmark(error: OllamaClientError, started_at: String) -> BenchmarkRe
         done_reason: None,
         error_code: Some(error.code),
         error_message: Some(error.message),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn benchmark_job(status: JobStatus, completed: usize, total: usize) -> ProfilerJob {
+        ProfilerJob {
+            id: "benchmark-job".into(),
+            kind: JobKind::Benchmark,
+            status,
+            label: "Benchmark all approved local models".into(),
+            completed,
+            total,
+            created_at: "2026-07-26T00:00:00Z".into(),
+            updated_at: "2026-07-26T00:05:00Z".into(),
+            target_server_ids: vec!["server-1".into()],
+            benchmark_started_at: Some("2026-07-26T00:00:00Z".into()),
+            summary: None,
+            error_message: None,
+        }
+    }
+
+    fn benchmark_model(finished_at: &str) -> ServerModel {
+        ServerModel {
+            id: "model-1".into(),
+            name: "llama3.1:8b".into(),
+            digest: None,
+            family: None,
+            parameter_size: None,
+            quantization: None,
+            size_bytes: None,
+            capabilities: vec!["completion".into()],
+            installed: true,
+            first_seen_at: "2026-07-25T00:00:00Z".into(),
+            last_seen_at: "2026-07-26T00:00:00Z".into(),
+            benchmarks: vec![BenchmarkResult {
+                id: "result-1".into(),
+                status: BenchmarkStatus::Success,
+                started_at: "2026-07-26T00:01:00Z".into(),
+                finished_at: finished_at.into(),
+                tokens_per_second: Some(42.0),
+                ttft_ms: None,
+                client_total_ms: None,
+                eval_count: None,
+                eval_duration_ns: None,
+                prompt_eval_count: None,
+                prompt_eval_duration_ns: None,
+                load_duration_ns: None,
+                total_duration_ns: None,
+                done_reason: None,
+                error_code: None,
+                error_message: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn only_the_latest_unfinished_benchmark_can_be_resumed() {
+        let mut snapshot = ProfilerSnapshot::empty("2026-07-26T00:00:00Z".into());
+        snapshot
+            .jobs
+            .push(benchmark_job(JobStatus::Cancelled, 2, 5));
+        assert!(latest_incomplete_benchmark(&snapshot).is_some());
+
+        snapshot
+            .jobs
+            .insert(0, benchmark_job(JobStatus::Completed, 5, 5));
+        assert!(latest_incomplete_benchmark(&snapshot).is_none());
+    }
+
+    #[test]
+    fn resume_skips_models_already_attempted_during_the_interrupted_run() {
+        assert!(was_benchmarked_since(
+            &benchmark_model("2026-07-26T00:02:00Z"),
+            "2026-07-26T00:00:00Z"
+        ));
+        assert!(!was_benchmarked_since(
+            &benchmark_model("2026-07-25T23:59:00Z"),
+            "2026-07-26T00:00:00Z"
+        ));
     }
 }

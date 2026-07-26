@@ -85,6 +85,8 @@ export interface ProfilerJob {
   total: number
   createdAt: string
   updatedAt: string
+  targetServerIds?: string[]
+  benchmarkStartedAt?: string
   summary?: string
   errorMessage?: string
 }
@@ -166,7 +168,7 @@ export interface DesktopApi {
   commitImport: (options: ImportCommitOptions) => Promise<{ added: number; updated: number }>
   testLocalhost: () => Promise<string>
   scanLocalNetwork: () => Promise<string>
-  profileAllServers: () => Promise<string>
+  profileAllServers: (resumeIncomplete?: boolean) => Promise<string>
   setBenchmarkApproval: (serverId: string, approved: boolean) => Promise<void>
   updateSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>
   removeServer: (serverId: string) => Promise<void>

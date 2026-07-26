@@ -179,6 +179,10 @@ pub struct ProfilerJob {
     pub total: usize,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub target_server_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub benchmark_started_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

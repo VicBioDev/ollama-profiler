@@ -1,4 +1,5 @@
 import { AlertCircle, X } from 'lucide-react'
+import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog'
 import { useEffect, useMemo, useState } from 'react'
 import { Sidebar, type PageId } from './components/Sidebar'
 import { TopBar, type TopBarAction } from './components/TopBar'
@@ -11,6 +12,7 @@ import { ServerDetailPage } from './pages/ServerDetailPage'
 import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { isLocalDiscoveryServer } from './hooks/useLocalDiscovery'
+import { confirmBenchmarkContinuation } from '@shared/job-utils'
 
 interface AppProps {}
 
@@ -56,7 +58,11 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
       ? undefined
       : {
           label: 'Scan & benchmark all',
-          onClick: () => void actions.profileAllServers()
+          onClick: () => {
+            void confirmBenchmarkContinuation(snapshot.jobs, confirmDialog).then((resume) =>
+              actions.profileAllServers(resume)
+            )
+          }
         }
 
   return (

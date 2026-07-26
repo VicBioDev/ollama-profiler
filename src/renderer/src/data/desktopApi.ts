@@ -44,7 +44,8 @@ export function createDesktopApi(): DesktopApi {
       invoke<{ added: number; updated: number }>('commit_import', { options }),
     testLocalhost: () => invoke<string>('test_localhost'),
     scanLocalNetwork: () => invoke<string>('scan_local_network'),
-    profileAllServers: () => invoke<string>('profile_all_servers'),
+    profileAllServers: (resumeIncomplete = false) =>
+      invoke<string>('profile_all_servers', { resumeIncomplete }),
     setBenchmarkApproval: (serverId: string, approved: boolean) =>
       invoke<void>('set_benchmark_approval', { serverId, approved }),
     updateSettings: (settings: Partial<AppSettings>) =>

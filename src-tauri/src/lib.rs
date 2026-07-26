@@ -60,8 +60,13 @@ fn scan_local_network(engine: State<'_, ProfilerEngine>) -> CommandResult<String
 }
 
 #[tauri::command]
-fn profile_all_servers(engine: State<'_, ProfilerEngine>) -> CommandResult<String> {
-    engine.profile_all_servers().map_err(command_error)
+fn profile_all_servers(
+    engine: State<'_, ProfilerEngine>,
+    resume_incomplete: bool,
+) -> CommandResult<String> {
+    engine
+        .profile_all_servers(resume_incomplete)
+        .map_err(command_error)
 }
 
 #[tauri::command]

@@ -183,6 +183,8 @@ mod tests {
             total: 2,
             created_at: "2026-07-25T00:00:00Z".into(),
             updated_at: "2026-07-25T00:00:00Z".into(),
+            target_server_ids: Vec::new(),
+            benchmark_started_at: None,
             summary: None,
             error_message: None,
         });
