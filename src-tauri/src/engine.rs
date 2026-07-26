@@ -44,6 +44,8 @@ struct ScanOptions {
     label: Option<String>,
 }
 
+const MAX_JOB_PROGRESS_SAMPLES: usize = 11;
+
 impl ProfilerEngine {
     pub fn new(app: AppHandle, store: ProfilerStore) -> Self {
         Self {
@@ -1041,6 +1043,7 @@ impl ProfilerEngine {
             total,
             created_at: now.clone(),
             updated_at: now,
+            progress_samples: Vec::new(),
             target_server_ids,
             benchmark_started_at,
             summary: None,
@@ -1062,7 +1065,12 @@ impl ProfilerEngine {
                 && job.status != JobStatus::Cancelled
             {
                 job.status = JobStatus::Running;
-                job.updated_at = Utc::now().to_rfc3339();
+                let now = Utc::now().to_rfc3339();
+                job.updated_at = now.clone();
+                job.progress_samples = vec![JobProgressSample {
+                    completed: job.completed,
+                    recorded_at: now,
+                }];
             }
             Ok(())
         })?;
@@ -1075,8 +1083,8 @@ impl ProfilerEngine {
             if let Some(job) = snapshot.jobs.iter_mut().find(|job| job.id == job_id)
                 && matches!(job.status, JobStatus::Queued | JobStatus::Running)
             {
-                job.completed = (job.completed + 1).min(job.total);
-                job.updated_at = Utc::now().to_rfc3339();
+                let completed = (job.completed + 1).min(job.total);
+                record_job_progress(job, completed, Utc::now().to_rfc3339());
             }
             Ok(())
         })?;
@@ -1089,8 +1097,10 @@ impl ProfilerEngine {
             if let Some(job) = snapshot.jobs.iter_mut().find(|job| job.id == job_id)
                 && matches!(job.status, JobStatus::Queued | JobStatus::Running)
             {
-                job.completed = job.completed.max(completed).min(job.total);
-                job.updated_at = Utc::now().to_rfc3339();
+                let completed = job.completed.max(completed).min(job.total);
+                if completed > job.completed {
+                    record_job_progress(job, completed, Utc::now().to_rfc3339());
+                }
             }
             Ok(())
         })?;
@@ -1172,6 +1182,22 @@ impl ProfilerEngine {
             .active_jobs
             .lock()
             .map_err(|_| AppError::message("Job state is unavailable"))
+    }
+}
+
+fn record_job_progress(job: &mut ProfilerJob, completed: usize, recorded_at: String) {
+    job.completed = completed;
+    job.updated_at = recorded_at.clone();
+    job.progress_samples.push(JobProgressSample {
+        completed,
+        recorded_at,
+    });
+    let overflow = job
+        .progress_samples
+        .len()
+        .saturating_sub(MAX_JOB_PROGRESS_SAMPLES);
+    if overflow > 0 {
+        job.progress_samples.drain(..overflow);
     }
 }
 
@@ -1329,6 +1355,7 @@ mod tests {
             total,
             created_at: "2026-07-26T00:00:00Z".into(),
             updated_at: "2026-07-26T00:05:00Z".into(),
+            progress_samples: Vec::new(),
             target_server_ids: vec!["server-1".into()],
             benchmark_started_at: Some("2026-07-26T00:00:00Z".into()),
             summary: None,
@@ -1368,6 +1395,40 @@ mod tests {
                 error_message: None,
             }],
         }
+    }
+
+    #[test]
+    fn keeps_only_the_latest_ten_progress_intervals() {
+        let mut job = ProfilerJob {
+            id: "job".into(),
+            kind: JobKind::Scan,
+            status: JobStatus::Running,
+            label: "Scan all servers".into(),
+            completed: 0,
+            total: 20,
+            created_at: "2026-07-26T00:00:00Z".into(),
+            updated_at: "2026-07-26T00:00:00Z".into(),
+            progress_samples: vec![JobProgressSample {
+                completed: 0,
+                recorded_at: "2026-07-26T00:00:00Z".into(),
+            }],
+            target_server_ids: Vec::new(),
+            benchmark_started_at: None,
+            summary: None,
+            error_message: None,
+        };
+
+        for completed in 1..=20 {
+            record_job_progress(
+                &mut job,
+                completed,
+                format!("2026-07-26T00:00:{completed:02}Z"),
+            );
+        }
+
+        assert_eq!(job.progress_samples.len(), MAX_JOB_PROGRESS_SAMPLES);
+        assert_eq!(job.progress_samples[0].completed, 10);
+        assert_eq!(job.progress_samples[10].completed, 20);
     }
 
     #[test]

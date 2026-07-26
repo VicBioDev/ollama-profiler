@@ -170,6 +170,13 @@ pub struct ServerRecord {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JobProgressSample {
+    pub completed: usize,
+    pub recorded_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProfilerJob {
     pub id: String,
     pub kind: JobKind,
@@ -179,6 +186,8 @@ pub struct ProfilerJob {
     pub total: usize,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub progress_samples: Vec<JobProgressSample>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub target_server_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

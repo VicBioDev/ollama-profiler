@@ -15,7 +15,11 @@ import {
 } from '@renderer/pages/ServersPage.js'
 import { Sidebar } from '@renderer/components/Sidebar.js'
 import { ServerTable } from '@renderer/components/ServerTable.js'
-import { TopBar } from '@renderer/components/TopBar.js'
+import {
+  estimateRemainingMs,
+  formatEstimatedRemaining,
+  TopBar
+} from '@renderer/components/TopBar.js'
 
 const settings: ProfilerSnapshot['settings'] = {
   scanConcurrency: 8,
@@ -374,7 +378,11 @@ describe('state-driven interface', () => {
             completed: 1,
             total: 2,
             createdAt: '2026-07-26T00:00:00.000Z',
-            updatedAt: '2026-07-26T00:00:00.000Z'
+            updatedAt: '2026-07-26T00:00:06.000Z',
+            progressSamples: [
+              { completed: 0, recordedAt: '2026-07-26T00:00:00.000Z' },
+              { completed: 1, recordedAt: '2026-07-26T00:00:06.000Z' }
+            ]
           }
         ]}
         profileAction={{
@@ -406,11 +414,33 @@ describe('state-driven interface', () => {
     )
 
     expect(scanning).toContain('Scan all servers · 1/2')
+    expect(scanning).toContain('&lt;10s remaining')
     expect(scanning).toContain('Scanning all…')
     expect(scanning.match(/disabled/g)?.length).toBe(1)
     expect(benchmarking).toContain('Re-run benchmarks for 2 servers · 1/2')
     expect(benchmarking).toContain('Benchmarking all…')
     expect(benchmarking.match(/disabled/g)?.length).toBe(1)
+  })
+
+  it('estimates remaining time from recent progress throughput', () => {
+    const job = {
+      id: 'scan-job',
+      kind: 'scan' as const,
+      status: 'running' as const,
+      label: 'Scan all servers',
+      completed: 10,
+      total: 25,
+      createdAt: '2026-07-26T00:00:00.000Z',
+      updatedAt: '2026-07-26T00:00:20.000Z',
+      progressSamples: [
+        { completed: 4, recordedAt: '2026-07-26T00:00:08.000Z' },
+        { completed: 10, recordedAt: '2026-07-26T00:00:20.000Z' }
+      ]
+    }
+
+    expect(estimateRemainingMs(job)).toBe(30_000)
+    expect(formatEstimatedRemaining(estimateRemainingMs(job))).toBe('~30s remaining')
+    expect(estimateRemainingMs({ ...job, progressSamples: undefined })).toBeUndefined()
   })
 
   it('shows only local discovery actions before a local scan', () => {

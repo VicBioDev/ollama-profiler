@@ -14,6 +14,11 @@ export type JobKind =
   | 'benchmark'
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
+export interface JobProgressSample {
+  completed: number
+  recordedAt: string
+}
+
 export interface DiscoveryCandidate {
   endpoint: string
   source: DiscoverySource
@@ -85,6 +90,7 @@ export interface ProfilerJob {
   total: number
   createdAt: string
   updatedAt: string
+  progressSamples?: JobProgressSample[]
   targetServerIds?: string[]
   benchmarkStartedAt?: string
   summary?: string
