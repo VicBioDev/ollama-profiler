@@ -45,8 +45,9 @@ describe('chat page', () => {
     )
 
     expect(html).toContain('One prompt. Up to four models.')
-    expect(html).toContain('No history stored')
-    expect(html).toContain('Each request sends only the current prompt.')
+    expect(html).toContain('No disk history')
+    expect(html).toContain('This test stays in memory while the app is open')
+    expect(html).toContain('Closing the app clears it.')
     expect(html).toContain('qwen3:8b')
     expect(html).toContain('42.0 tok/s')
     expect(html).toContain('http://127.0.0.1:11434')

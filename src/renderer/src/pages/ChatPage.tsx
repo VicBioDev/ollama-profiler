@@ -8,7 +8,13 @@ import {
   X,
   Zap
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
 import {
   buildChatModelCatalog,
   routeChatModels,
@@ -24,24 +30,72 @@ import { formatDuration, formatSpeed } from '../utils/format'
 interface ChatPageProps {
   readonly servers: ServerRecord[]
   readonly onChat: (request: ChatRequest) => Promise<ChatResponse>
+  readonly onSessionStateChange?: Dispatch<SetStateAction<ChatSessionState>>
   readonly onShowServers: () => void
+  readonly sessionState?: ChatSessionState
+}
+
+export interface ChatSessionState {
+  selectedModelNames?: string[]
+  modelQuery: string
+  modelPickerOpen: boolean
+  prompt: string
+  response?: ChatResponse
+  sending: boolean
+  notice?: string
+}
+
+export function createChatSessionState(): ChatSessionState {
+  return {
+    modelQuery: '',
+    modelPickerOpen: false,
+    prompt: '',
+    sending: false
+  }
 }
 
 export function ChatPage({
   servers,
   onChat,
-  onShowServers
+  onSessionStateChange,
+  onShowServers,
+  sessionState
 }: Readonly<ChatPageProps>): React.JSX.Element {
   const catalog = useMemo(() => buildChatModelCatalog(servers), [servers])
-  const [selectedModelNames, setSelectedModelNames] = useState<string[]>(
-    () => catalog[0] ? [catalog[0].name] : []
+  const [localSessionState, setLocalSessionState] = useState(
+    createChatSessionState
   )
-  const [modelQuery, setModelQuery] = useState('')
-  const [modelPickerOpen, setModelPickerOpen] = useState(false)
-  const [prompt, setPrompt] = useState('')
-  const [response, setResponse] = useState<ChatResponse>()
-  const [sending, setSending] = useState(false)
-  const [notice, setNotice] = useState<string>()
+  const activeSessionState = sessionState ?? localSessionState
+  const setActiveSessionState =
+    onSessionStateChange ?? setLocalSessionState
+  const selectedModelNames =
+    activeSessionState.selectedModelNames ??
+    (catalog[0] ? [catalog[0].name] : [])
+  const {
+    modelQuery,
+    modelPickerOpen,
+    notice,
+    prompt,
+    response,
+    sending
+  } = activeSessionState
+
+  useEffect(() => {
+    const initialModelName = catalog[0]?.name
+    if (
+      !initialModelName ||
+      !onSessionStateChange ||
+      sessionState?.selectedModelNames !== undefined
+    ) {
+      return
+    }
+    onSessionStateChange((current) =>
+      current.selectedModelNames === undefined
+        ? { ...current, selectedModelNames: [initialModelName] }
+        : current
+    )
+  }, [catalog, onSessionStateChange, sessionState?.selectedModelNames])
+
   const selectedKeys = new Set(
     selectedModelNames.map((name) => name.toLowerCase())
   )
@@ -75,54 +129,79 @@ export function ChatPage({
     if (selectedModelNames.length === 1 && !nextRoute) {
       nextSelection = [nextName]
     } else if (!nextRoute) {
-      setNotice(
-        'That combination cannot run on separate servers. Choose a model available on another generation-enabled server.'
-      )
+      setActiveSessionState((current) => ({
+        ...current,
+        notice:
+          'That combination cannot run on separate servers. Choose a model available on another generation-enabled server.'
+      }))
       return
     }
-    setSelectedModelNames(nextSelection)
-    setModelQuery('')
-    setModelPickerOpen(false)
-    setNotice(undefined)
-    setResponse(undefined)
+    setActiveSessionState((current) => ({
+      ...current,
+      selectedModelNames: nextSelection,
+      modelQuery: '',
+      modelPickerOpen: false,
+      notice: undefined,
+      response: undefined
+    }))
   }
 
   const removeModel = (name: string): void => {
-    setSelectedModelNames((current) =>
-      current.filter((candidate) => candidate !== name)
-    )
-    setNotice(undefined)
-    setResponse(undefined)
+    setActiveSessionState((current) => ({
+      ...current,
+      selectedModelNames: selectedModelNames.filter(
+        (candidate) => candidate !== name
+      ),
+      notice: undefined,
+      response: undefined
+    }))
   }
 
   const send = async (): Promise<void> => {
     const message = prompt.trim()
     if (!message) {
-      setNotice('Enter a message before sending.')
+      setActiveSessionState((current) => ({
+        ...current,
+        notice: 'Enter a message before sending.'
+      }))
       return
     }
     if (!route) {
-      setNotice('Choose at least one model that can run on a distinct server.')
+      setActiveSessionState((current) => ({
+        ...current,
+        notice: 'Choose at least one model that can run on a distinct server.'
+      }))
       return
     }
 
-    setSending(true)
-    setNotice(undefined)
-    setResponse(undefined)
+    setActiveSessionState((current) => ({
+      ...current,
+      sending: true,
+      notice: undefined,
+      response: undefined
+    }))
     try {
-      setResponse(
-        await onChat({
-          prompt: message,
-          targets: route.targets.map(({ serverId, modelName }) => ({
-            serverId,
-            modelName
-          }))
-        })
-      )
+      const nextResponse = await onChat({
+        prompt: message,
+        targets: route.targets.map(({ serverId, modelName }) => ({
+          serverId,
+          modelName
+        }))
+      })
+      setActiveSessionState((current) => ({
+        ...current,
+        response: nextResponse
+      }))
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error))
+      setActiveSessionState((current) => ({
+        ...current,
+        notice: error instanceof Error ? error.message : String(error)
+      }))
     } finally {
-      setSending(false)
+      setActiveSessionState((current) => ({
+        ...current,
+        sending: false
+      }))
     }
   }
 
@@ -160,10 +239,10 @@ export function ChatPage({
         <aside className="safety-card">
           <ShieldCheck size={18} />
           <div>
-            <strong>No history stored</strong>
+            <strong>No disk history</strong>
             <p>
-              Ollama Profiler does not save prompts or replies. Each request sends only
-              the current prompt.
+              This test stays in memory while the app is open, but prompts and replies
+              are never written to disk. Closing the app clears it.
             </p>
           </div>
         </aside>
@@ -183,7 +262,10 @@ export function ChatPage({
             className="chat-model-search"
             onBlur={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget)) {
-                setModelPickerOpen(false)
+                setActiveSessionState((current) => ({
+                  ...current,
+                  modelPickerOpen: false
+                }))
               }
             }}
           >
@@ -195,17 +277,28 @@ export function ChatPage({
               aria-label="Search chat models"
               disabled={selectedModelNames.length >= 4 || availableChoices.length === 0}
               onChange={(event) => {
-                setModelQuery(event.target.value)
-                setModelPickerOpen(true)
-                setNotice(undefined)
+                setActiveSessionState((current) => ({
+                  ...current,
+                  modelQuery: event.target.value,
+                  modelPickerOpen: true,
+                  notice: undefined
+                }))
               }}
-              onFocus={() => setModelPickerOpen(true)}
+              onFocus={() =>
+                setActiveSessionState((current) => ({
+                  ...current,
+                  modelPickerOpen: true
+                }))
+              }
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && matchingChoices.length > 0) {
                   event.preventDefault()
                   addModel()
                 } else if (event.key === 'Escape') {
-                  setModelPickerOpen(false)
+                  setActiveSessionState((current) => ({
+                    ...current,
+                    modelPickerOpen: false
+                  }))
                 }
               }}
               placeholder="Search models"
@@ -290,8 +383,11 @@ export function ChatPage({
           <textarea
             maxLength={20_000}
             onChange={(event) => {
-              setPrompt(event.target.value)
-              setNotice(undefined)
+              setActiveSessionState((current) => ({
+                ...current,
+                prompt: event.target.value,
+                notice: undefined
+              }))
             }}
             placeholder="Ask every selected model the same thing…"
             rows={6}

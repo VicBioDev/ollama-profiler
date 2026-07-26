@@ -11,7 +11,10 @@ import { LocalDiscoveryPage } from './pages/LocalDiscoveryPage'
 import { ServerDetailPage } from './pages/ServerDetailPage'
 import { ServersPage } from './pages/ServersPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { ChatPage } from './pages/ChatPage'
+import {
+  ChatPage,
+  createChatSessionState
+} from './pages/ChatPage'
 import { isLocalDiscoveryServer } from './hooks/useLocalDiscovery'
 import { useBenchmarkContinuationOnLaunch } from './hooks/useBenchmarkContinuationOnLaunch'
 import { confirmBenchmarkContinuation } from '@shared/job-utils'
@@ -23,6 +26,9 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
   const updater = useAppUpdater()
   const [page, setPage] = useState<PageId>('overview')
   const [selectedServerId, setSelectedServerId] = useState<string>()
+  const [chatSessionState, setChatSessionState] = useState(
+    createChatSessionState
+  )
   const selectedServer = useMemo(
     () => snapshot?.servers.find((server) => server.id === selectedServerId),
     [selectedServerId, snapshot?.servers]
@@ -136,8 +142,10 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
           ) : page === 'chat' ? (
             <ChatPage
               onChat={actions.chatModels}
+              onSessionStateChange={setChatSessionState}
               onShowServers={() => navigate('servers')}
               servers={snapshot.servers}
+              sessionState={chatSessionState}
             />
           ) : page === 'imports' ? (
             <ImportPage
