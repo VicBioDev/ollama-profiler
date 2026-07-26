@@ -81,7 +81,6 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
         onNavigate={navigate}
         onCheckForUpdates={() => void updater.checkForUpdates()}
         onInstallUpdate={() => void updater.installUpdate()}
-        showSettings={window.ollamaProfiler.platform !== 'darwin'}
         updateState={updater.state}
       />
       <div className="main-shell">

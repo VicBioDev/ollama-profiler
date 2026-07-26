@@ -12,7 +12,6 @@ interface SidebarProps {
   readonly onCheckForUpdates?: () => void
   readonly onInstallUpdate?: () => void
   readonly onNavigate: (page: PageId) => void
-  readonly showSettings?: boolean
   readonly updateState?: AppUpdateState
 }
 
@@ -23,16 +22,12 @@ export function Sidebar({
   onCheckForUpdates,
   onInstallUpdate,
   onNavigate,
-  showSettings = true,
   updateState
 }: Readonly<SidebarProps>): React.JSX.Element {
   const Mark = APP_COPY.mark
-  const availableItems = showSettings
-    ? NAV_ITEMS
-    : NAV_ITEMS.filter((item) => item.id !== 'settings')
   const visibleItems = hasServers
-    ? availableItems
-    : availableItems.filter(
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter(
         (item) => item.id !== 'servers' && item.id !== 'chat'
       )
   return (

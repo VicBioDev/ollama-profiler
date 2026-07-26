@@ -147,18 +147,17 @@ describe('state-driven interface', () => {
     expect(topbar).not.toContain('Profiler ready')
   })
 
-  it('lets macOS keep Settings in the application menu', () => {
+  it('keeps Settings visible in the primary navigation', () => {
     const sidebar = renderToStaticMarkup(
       <Sidebar
         activePage="overview"
         hasServers
         localState="idle"
         onNavigate={() => undefined}
-        showSettings={false}
       />
     )
 
-    expect(sidebar).not.toContain('>Settings<')
+    expect(sidebar).toContain('>Settings<')
     expect(sidebar).toContain('>Overview<')
     expect(sidebar).toContain('>Servers<')
     expect(sidebar).toContain('>Import<')
