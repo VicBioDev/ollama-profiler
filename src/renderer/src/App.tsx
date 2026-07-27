@@ -93,6 +93,7 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
         onNavigate={navigate}
         onCheckForUpdates={() => void updater.checkForUpdates()}
         onInstallUpdate={() => void updater.installUpdate()}
+        onRestartUpdate={() => void updater.restartToUpdate()}
         updateState={updater.state}
       />
       <div className="main-shell">

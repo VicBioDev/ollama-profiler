@@ -9,6 +9,7 @@ export type UpdatePhase =
   | 'available'
   | 'downloading'
   | 'installing'
+  | 'ready-to-restart'
   | 'restarting'
   | 'error'
 
@@ -17,6 +18,7 @@ export interface AppUpdateState {
   readonly label: string
   readonly detail: string
   readonly version?: string
+  readonly notes?: string
 }
 
 const IDLE_STATE: AppUpdateState = {
@@ -29,6 +31,7 @@ export function useAppUpdater(): {
   readonly state: AppUpdateState
   readonly checkForUpdates: () => Promise<void>
   readonly installUpdate: () => Promise<void>
+  readonly restartToUpdate: () => Promise<void>
 } {
   const [state, setState] = useState<AppUpdateState>(IDLE_STATE)
   const availableUpdate = useRef<
@@ -67,9 +70,10 @@ export function useAppUpdater(): {
       availableUpdate.current = update
       setState({
         phase: 'available',
-        label: 'Update available',
-        detail: `A signed update to v${update.version} is available. Click the new version to download and install it.`,
-        version: update.version
+        label: `v${update.version} is available`,
+        detail: 'Review the release notes before downloading and installing.',
+        version: update.version,
+        notes: update.body?.trim() || undefined
       })
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
@@ -127,12 +131,13 @@ export function useAppUpdater(): {
         }
       })
 
+      availableUpdate.current = undefined
       setState({
-        phase: 'restarting',
-        label: 'Restarting…',
-        detail: `v${update.version} is installed. Restarting the app.`
+        phase: 'ready-to-restart',
+        label: 'Ready to restart',
+        detail: `v${update.version} is installed. Restart when you are ready to use it.`,
+        version: update.version
       })
-      await relaunch()
     } catch (caught) {
       availableUpdate.current = undefined
       const message = caught instanceof Error ? caught.message : String(caught)
@@ -144,5 +149,31 @@ export function useAppUpdater(): {
     }
   }, [state.phase])
 
-  return { state, checkForUpdates, installUpdate }
+  const restartToUpdate = useCallback(async (): Promise<void> => {
+    if (state.phase !== 'ready-to-restart' || !state.version) {
+      return
+    }
+
+    const version = state.version
+    setState({
+      phase: 'restarting',
+      label: 'Restarting…',
+      detail: `Restarting into v${version}.`,
+      version
+    })
+
+    try {
+      await relaunch()
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      setState({
+        phase: 'error',
+        label: 'Restart failed',
+        detail: message,
+        version
+      })
+    }
+  }, [state.phase, state.version])
+
+  return { state, checkForUpdates, installUpdate, restartToUpdate }
 }

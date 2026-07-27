@@ -185,7 +185,7 @@ describe('state-driven interface', () => {
     expect(sidebar).toContain('disabled=""')
   })
 
-  it('offers installation as a separate action after an update is found', () => {
+  it('keeps the boxed version and update check action on one row', () => {
     const sidebar = renderToStaticMarkup(
       <Sidebar
         activePage="overview"
@@ -196,22 +196,47 @@ describe('state-driven interface', () => {
         onNavigate={() => undefined}
         updateState={{
           phase: 'available',
-          label: 'Update available',
+          label: 'v0.2.0 is available',
           detail: 'A signed update to v0.2.0 is available.',
-          version: '0.2.0'
+          version: '0.2.0',
+          notes: 'Improved discovery.'
         }}
       />
     )
 
     expect(sidebar).toContain('sidebar-version available')
     expect(sidebar).toContain('sidebar-current-version')
-    expect(sidebar).toContain('Click to check for updates')
-    expect(sidebar).toContain('sidebar-update-version')
-    expect(sidebar).toContain('→ v0.2.0')
+    expect(sidebar).toContain('sidebar-check-update')
+    expect(sidebar).toContain('Check for updates')
+    expect(sidebar).toContain('v0.2.0 is available')
+    expect(sidebar).toContain('sidebar-update-action')
     expect(sidebar.indexOf(`v${APP_VERSION}`)).toBeLessThan(
-      sidebar.indexOf('→ v0.2.0')
+      sidebar.indexOf('Check for updates')
     )
     expect(sidebar).not.toContain('disabled=""')
+  })
+
+  it('shows a restart action only after installation finishes', () => {
+    const sidebar = renderToStaticMarkup(
+      <Sidebar
+        activePage="overview"
+        hasServers
+        localState="idle"
+        onNavigate={() => undefined}
+        onRestartUpdate={() => undefined}
+        updateState={{
+          phase: 'ready-to-restart',
+          label: 'Ready to restart',
+          detail: 'v0.2.0 is installed.',
+          version: '0.2.0'
+        }}
+      />
+    )
+
+    expect(sidebar).toContain('sidebar-version ready-to-restart')
+    expect(sidebar).toContain('v0.2.0 is ready')
+    expect(sidebar).toContain('Restart now')
+    expect(sidebar).not.toContain('Download &amp; install')
   })
 
   it('shows benchmark permission only for generation-capable models', () => {

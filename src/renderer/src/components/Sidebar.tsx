@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import { useState } from 'react'
 import { APP_VERSION } from '@shared/generated-version'
 import type { AppUpdateState } from '../hooks/useAppUpdater'
 import { APP_COPY, NAV_ITEMS } from '../data/uiCopy'
@@ -12,6 +13,7 @@ interface SidebarProps {
   readonly onCheckForUpdates?: () => void
   readonly onInstallUpdate?: () => void
   readonly onNavigate: (page: PageId) => void
+  readonly onRestartUpdate?: () => void
   readonly updateState?: AppUpdateState
 }
 
@@ -22,8 +24,10 @@ export function Sidebar({
   onCheckForUpdates,
   onInstallUpdate,
   onNavigate,
+  onRestartUpdate,
   updateState
 }: Readonly<SidebarProps>): React.JSX.Element {
+  const [showUpdateConfirmation, setShowUpdateConfirmation] = useState(false)
   const Mark = APP_COPY.mark
   const visibleItems = hasServers
     ? NAV_ITEMS
@@ -34,6 +38,7 @@ export function Sidebar({
     updateState?.phase === 'checking' ||
     updateState?.phase === 'downloading' ||
     updateState?.phase === 'installing' ||
+    updateState?.phase === 'ready-to-restart' ||
     updateState?.phase === 'restarting'
   return (
     <aside className="sidebar" data-tauri-drag-region="deep">
@@ -77,36 +82,98 @@ export function Sidebar({
         data-tauri-drag-region="false"
       >
         <div className="sidebar-version-row">
-          <button
-            aria-label={`Version ${APP_VERSION}. Check for updates`}
+          <span
+            aria-label={`Version ${APP_VERSION}. Current version`}
             className="sidebar-current-version"
+          >
+            v{APP_VERSION}
+          </span>
+          <button
+            className="sidebar-check-update"
             disabled={updaterBusy}
             onClick={onCheckForUpdates}
             type="button"
           >
-            <span>v{APP_VERSION}</span>
-            <span className="sidebar-version-tooltip" role="tooltip">
-              Click to check for updates
-            </span>
+            {updateState?.phase === 'checking' ? 'Checking…' : 'Check for updates'}
           </button>
-          {updateState?.phase === 'available' && updateState.version ? (
+        </div>
+        {updateState?.phase === 'available' && updateState.version ? (
+          <div className="sidebar-update-notice">
+            <small>{updateState.label}</small>
             <button
-              aria-label={`Install update v${updateState.version}`}
-              className="sidebar-update-version"
-              onClick={onInstallUpdate}
-              title={`Click to install v${updateState.version}`}
+              className="sidebar-update-action"
+              onClick={() => setShowUpdateConfirmation(true)}
               type="button"
             >
-              → v{updateState.version}
+              Update
             </button>
-          ) : null}
-        </div>
-        {updateState &&
-        updateState.phase !== 'idle' &&
-        updateState.phase !== 'available' ? (
+          </div>
+        ) : updateState?.phase === 'ready-to-restart' && updateState.version ? (
+          <div className="sidebar-update-notice ready">
+            <small>v{updateState.version} is ready</small>
+            <button
+              className="sidebar-restart-action"
+              onClick={onRestartUpdate}
+              type="button"
+            >
+              Restart now
+            </button>
+          </div>
+        ) : updateState && updateState.phase !== 'idle' ? (
           <small>{updateState.label}</small>
         ) : null}
       </div>
+      {showUpdateConfirmation &&
+      updateState?.phase === 'available' &&
+      updateState.version ? (
+        <div className="update-dialog-backdrop">
+          <section
+            aria-labelledby="update-dialog-title"
+            aria-modal="true"
+            className="update-dialog"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setShowUpdateConfirmation(false)
+              }
+            }}
+            role="dialog"
+          >
+            <span className="update-dialog-eyebrow">Application update</span>
+            <h2 id="update-dialog-title">Update to v{updateState.version}?</h2>
+            <p>
+              Review what is included. The update will only download and install
+              after you confirm.
+            </p>
+            <div className="update-release-notes">
+              <strong>What’s new</strong>
+              <div>
+                {updateState.notes ??
+                  'No release notes were provided for this version.'}
+              </div>
+            </div>
+            <div className="update-dialog-actions">
+              <button
+                autoFocus
+                className="button secondary"
+                onClick={() => setShowUpdateConfirmation(false)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="button primary"
+                onClick={() => {
+                  setShowUpdateConfirmation(false)
+                  onInstallUpdate?.()
+                }}
+                type="button"
+              >
+                Download &amp; install
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </aside>
   )
 }

@@ -119,10 +119,11 @@ Rust 检查，再在 macOS Apple Silicon、macOS Intel、Windows x64 和 Linux x
 GitHub Release，并附带 Tauri 的 `latest.json`、安装包和签名；不需要手动创建 tag。
 Pull Request 只运行检查，不发布 Release。
 
-应用启动后会自动检查上述 GitHub Release，也可以点击左下角的当前版本号手动重新
-检查。检查本身不会修改应用；找到更高版本后，新版本号会显示在当前版本右侧，只有
-点击新版本号才会下载、校验 Tauri 更新签名、替换当前安装并重新启动。为了确保
-Release 永远能被客户端安全验证，发布前必须配置：
+应用启动后会自动检查上述 GitHub Release，也可以点击左下角当前版本右侧的“检查
+更新”手动重新检查。找到更高版本后，界面会提示可用版本；点击更新会先显示版本号和
+GitHub Release 升级内容，用户确认后才下载、校验并安装签名更新。安装完成后应用不会
+自动重启，而是提供“现在重启”按钮，由用户决定何时进入新版本。为了确保 Release
+永远能被客户端安全验证，发布前必须配置：
 
 - `TAURI_SIGNING_PRIVATE_KEY`：与 `src-tauri/tauri.conf.json` 中公钥配对的私钥
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码；无密码密钥可留空

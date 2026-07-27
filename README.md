@@ -151,11 +151,13 @@ example, `v0.1.37`) with Tauri's `latest.json`, installers, and signatures. No
 manual tag is required. Pull Requests run checks without publishing a Release.
 
 The application checks these GitHub Releases on startup. Clicking the current
-version in the lower-left corner checks again without modifying the application.
-When a newer version is available, it appears to the right of the current version.
-Only clicking that new version downloads the update, verifies its Tauri signature,
-replaces the current installation, and restarts. To ensure every Release can be
-safely verified by clients, configure the following before publishing:
+version's adjacent **Check for updates** action checks again without modifying the
+application. When a newer version is available, the updater displays its version
+and opens a confirmation dialog with the GitHub Release notes before downloading.
+After the user confirms, the app downloads, verifies, and installs the signed
+update but keeps running. A separate **Restart now** action lets the user decide
+when to relaunch into the new version. To ensure every Release can be safely
+verified by clients, configure the following before publishing:
 
 - `TAURI_SIGNING_PRIVATE_KEY`: the private key paired with the public key in
   `src-tauri/tauri.conf.json`

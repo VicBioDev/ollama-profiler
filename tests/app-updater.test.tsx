@@ -38,10 +38,11 @@ afterEach(() => {
 })
 
 describe('application updater', () => {
-  it('checks on launch and only installs after a separate action', async () => {
+  it('checks on launch, installs after confirmation, and waits to restart', async () => {
     const downloadAndInstall = vi.fn(async () => undefined)
     checkMock.mockResolvedValue({
       version: '0.2.0',
+      body: 'Improved discovery.\nFixed update reliability.',
       downloadAndInstall
     })
 
@@ -55,8 +56,9 @@ describe('application updater', () => {
     expect(relaunchMock).not.toHaveBeenCalled()
     expect(updater.state).toMatchObject({
       phase: 'available',
-      label: 'Update available',
-      version: '0.2.0'
+      label: 'v0.2.0 is available',
+      version: '0.2.0',
+      notes: 'Improved discovery.\nFixed update reliability.'
     })
 
     await act(async () => {
@@ -64,6 +66,16 @@ describe('application updater', () => {
     })
 
     expect(downloadAndInstall).toHaveBeenCalledTimes(1)
+    expect(relaunchMock).not.toHaveBeenCalled()
+    expect(updater.state).toMatchObject({
+      phase: 'ready-to-restart',
+      version: '0.2.0'
+    })
+
+    await act(async () => {
+      await updater.restartToUpdate()
+    })
+
     expect(relaunchMock).toHaveBeenCalledTimes(1)
     expect(updater.state.phase).toBe('restarting')
   })
@@ -80,6 +92,7 @@ describe('application updater', () => {
 
     await act(async () => {
       await updater.installUpdate()
+      await updater.restartToUpdate()
     })
 
     expect(relaunchMock).not.toHaveBeenCalled()
@@ -98,7 +111,7 @@ describe('application updater', () => {
     expect(checkMock).toHaveBeenCalledTimes(2)
   })
 
-  it('uses separate current-version and install-version controls', () => {
+  it('keeps the version and check action on one row and confirms updates', () => {
     const onCheckForUpdates = vi.fn()
     const onInstallUpdate = vi.fn()
 
@@ -113,30 +126,80 @@ describe('application updater', () => {
           onNavigate={() => undefined}
           updateState={{
             phase: 'available',
-            label: 'Update available',
+            label: 'v0.2.0 is available',
             detail: 'A signed update is available.',
+            version: '0.2.0',
+            notes: 'Improved discovery.\nFixed update reliability.'
+          }}
+        />
+      )
+    })
+
+    const versionRow = container.querySelector('.sidebar-version-row')
+    const currentVersion = container.querySelector(
+      '.sidebar-current-version'
+    )
+    const checkForUpdates = container.querySelector<HTMLButtonElement>(
+      '.sidebar-check-update'
+    )
+    const update = container.querySelector<HTMLButtonElement>(
+      '.sidebar-update-action'
+    )
+
+    expect(versionRow?.children).toHaveLength(2)
+    expect(currentVersion?.textContent).toContain('v')
+    expect(checkForUpdates?.textContent).toBe('Check for updates')
+    expect(container.textContent).toContain('v0.2.0 is available')
+
+    act(() => checkForUpdates?.click())
+    expect(onCheckForUpdates).toHaveBeenCalledTimes(1)
+    expect(onInstallUpdate).not.toHaveBeenCalled()
+
+    act(() => update?.click())
+    expect(onInstallUpdate).not.toHaveBeenCalled()
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Update to v0.2.0?'
+    )
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Improved discovery.'
+    )
+
+    const confirm = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Download & install'
+    )
+    act(() => confirm?.click())
+    expect(onInstallUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers restart only after the update is installed', () => {
+    const onRestartUpdate = vi.fn()
+
+    act(() => {
+      root.render(
+        <Sidebar
+          activePage="overview"
+          hasServers={true}
+          localState="idle"
+          onNavigate={() => undefined}
+          onRestartUpdate={onRestartUpdate}
+          updateState={{
+            phase: 'ready-to-restart',
+            label: 'Ready to restart',
+            detail: 'v0.2.0 is installed.',
             version: '0.2.0'
           }}
         />
       )
     })
 
-    const currentVersion = container.querySelector<HTMLButtonElement>(
-      '.sidebar-current-version'
+    expect(relaunchMock).not.toHaveBeenCalled()
+    const restart = container.querySelector<HTMLButtonElement>(
+      '.sidebar-restart-action'
     )
-    const newVersion = container.querySelector<HTMLButtonElement>(
-      '.sidebar-update-version'
-    )
+    expect(restart?.textContent).toBe('Restart now')
 
-    expect(currentVersion?.textContent).toContain('Click to check for updates')
-    expect(newVersion?.textContent).toContain('v0.2.0')
-
-    act(() => currentVersion?.click())
-    expect(onCheckForUpdates).toHaveBeenCalledTimes(1)
-    expect(onInstallUpdate).not.toHaveBeenCalled()
-
-    act(() => newVersion?.click())
-    expect(onInstallUpdate).toHaveBeenCalledTimes(1)
+    act(() => restart?.click())
+    expect(onRestartUpdate).toHaveBeenCalledTimes(1)
   })
 })
 
