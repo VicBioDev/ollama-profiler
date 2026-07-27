@@ -17,6 +17,10 @@ with no Docker, database service, or background web service required.
   current private LAN
 - Sync versions and complete model capabilities through `/api/version`,
   `/api/tags`, and `/api/show`
+- Check every saved server as soon as the application opens. If a full
+  benchmark is requested while that launch scan is still running, reuse its
+  results and start benchmarking immediately after it finishes instead of
+  scanning twice
 - For explicitly authorized servers, benchmark the streaming `/api/generate`
   endpoint and measure:
   - Generation speed using `eval_count × 1e9 / eval_duration`
@@ -39,8 +43,8 @@ with no Docker, database service, or background web service required.
 - Keep the top toolbar scoped to the current page: Overview offers only a full
   scan, the server list can benchmark all authorized online nodes, and a server
   detail page can scan or re-benchmark that server
-- Keep scanning and benchmarking explicit: a manual scan refreshes only the
-  version and model inventory, while a separate button starts benchmarks
+- Keep scanning and benchmarking explicit: launch and manual scans refresh only
+  the version and model inventory, while a separate button starts benchmarks
 - Preserve the latest successful speed when a newer benchmark fails; keep
   benchmark history locally for 90 days
 - Search models with suggestions and filter servers by status and country-level

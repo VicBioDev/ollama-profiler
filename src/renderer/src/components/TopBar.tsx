@@ -9,12 +9,14 @@ export interface TopBarAction {
 }
 
 interface TopBarProps {
+  readonly benchmarkAfterScanAvailable?: boolean
   readonly busy: boolean
   readonly jobs: ProfilerJob[]
   readonly profileAction?: TopBarAction
 }
 
 export function TopBar({
+  benchmarkAfterScanAvailable = false,
   busy,
   jobs,
   profileAction
@@ -48,14 +50,27 @@ export function TopBar({
           <button
             className="button primary compact"
             data-tauri-drag-region="false"
-            disabled={busy || profilingActive || profileAction.disabled}
+            disabled={
+              busy ||
+              Boolean(activeBenchmark) ||
+              Boolean(activeScan && !benchmarkAfterScanAvailable) ||
+              profileAction.disabled
+            }
             onClick={profileAction.onClick}
-            title={profileAction.disabled ? profileAction.disabledReason : undefined}
+            title={
+              activeScan && benchmarkAfterScanAvailable
+                ? 'Start benchmarking when the current scan finishes'
+                : profileAction.disabled
+                  ? profileAction.disabledReason
+                  : undefined
+            }
             type="button"
           >
             <RefreshCw className={profilingActive ? 'spin' : ''} size={14} />
             {activeScan
-              ? 'Scanning all…'
+              ? benchmarkAfterScanAvailable
+                ? 'Benchmark after scan'
+                : 'Scanning all…'
               : activeBenchmark
                 ? 'Benchmarking all…'
                 : profileAction.label}

@@ -37,6 +37,7 @@ struct EngineInner {
     store: Mutex<ProfilerStore>,
     import_sessions: Mutex<HashMap<String, ImportPreview>>,
     active_jobs: Mutex<HashMap<JobKind, String>>,
+    profile_after_scan: DeferredProfileRequests,
     server_locks: AsyncMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
     last_scheduled_scan: Mutex<Option<Instant>>,
     settings_changed: watch::Sender<u64>,
@@ -50,6 +51,47 @@ struct ScanOptions {
     label: Option<String>,
 }
 
+impl ScanOptions {
+    fn launch() -> Self {
+        Self {
+            label: Some("Check all servers on launch".into()),
+            ..Self::default()
+        }
+    }
+}
+
+#[derive(Default)]
+struct DeferredProfileRequests {
+    by_scan_job: Mutex<HashMap<String, bool>>,
+}
+
+impl DeferredProfileRequests {
+    fn defer(&self, scan_job_id: &str, resume_incomplete: bool) -> AppResult<()> {
+        let mut requests = self
+            .by_scan_job
+            .lock()
+            .map_err(|_| AppError::message("Deferred benchmark state is unavailable"))?;
+        requests
+            .entry(scan_job_id.to_string())
+            .and_modify(|resume| *resume = *resume && resume_incomplete)
+            .or_insert(resume_incomplete);
+        Ok(())
+    }
+
+    fn take(&self, scan_job_id: &str) -> AppResult<Option<bool>> {
+        self.by_scan_job
+            .lock()
+            .map_err(|_| AppError::message("Deferred benchmark state is unavailable"))
+            .map(|mut requests| requests.remove(scan_job_id))
+    }
+
+    fn clear(&self) {
+        if let Ok(mut requests) = self.by_scan_job.lock() {
+            requests.clear();
+        }
+    }
+}
+
 const MAX_JOB_PROGRESS_SAMPLES: usize = 11;
 
 impl ProfilerEngine {
@@ -61,6 +103,7 @@ impl ProfilerEngine {
                 store: Mutex::new(store),
                 import_sessions: Mutex::new(HashMap::new()),
                 active_jobs: Mutex::new(HashMap::new()),
+                profile_after_scan: DeferredProfileRequests::default(),
                 server_locks: AsyncMutex::new(HashMap::new()),
                 last_scheduled_scan: Mutex::new(None),
                 settings_changed,
@@ -84,6 +127,20 @@ impl ProfilerEngine {
                 let _ = engine.run_monitoring_cycle();
             }
         });
+    }
+
+    pub fn scan_all_servers_on_launch(&self) -> AppResult<Option<String>> {
+        if self.get_snapshot()?.servers.is_empty() {
+            return Ok(None);
+        }
+        let job_id = self.queue_scan(None, ScanOptions::launch())?;
+        *self
+            .inner
+            .last_scheduled_scan
+            .lock()
+            .map_err(|_| AppError::message("Monitoring state is unavailable"))? =
+            Some(Instant::now());
+        Ok(Some(job_id))
     }
 
     pub fn get_snapshot(&self) -> AppResult<ProfilerSnapshot> {
@@ -186,6 +243,7 @@ impl ProfilerEngine {
 
     pub fn profile_all_servers(&self, resume_incomplete: bool) -> AppResult<String> {
         if let Some(active) = self.find_active_job(JobKind::Scan)? {
+            self.defer_profile_until_scan_finishes(&active, resume_incomplete)?;
             return Ok(active);
         }
         if let Some(active) = self.find_active_job(JobKind::Benchmark)? {
@@ -197,38 +255,8 @@ impl ProfilerEngine {
                 "Add at least one server before starting a scan and benchmark",
             ));
         }
-        if resume_incomplete && let Some(previous) = latest_incomplete_benchmark(&snapshot).cloned()
-        {
-            let benchmark_started_at = previous
-                .benchmark_started_at
-                .unwrap_or_else(|| previous.created_at.clone());
-            let targets: HashSet<String> = if previous.target_server_ids.is_empty() {
-                snapshot
-                    .servers
-                    .iter()
-                    .map(|server| server.id.clone())
-                    .collect()
-            } else {
-                previous.target_server_ids.into_iter().collect()
-            };
-            let remaining = snapshot
-                .servers
-                .iter()
-                .filter(|server| {
-                    targets.contains(&server.id)
-                        && server.models.iter().any(|model| {
-                            is_benchmarkable_local_model(model)
-                                && !was_benchmarked_since(model, &benchmark_started_at)
-                        })
-                })
-                .map(|server| server.id.clone())
-                .collect();
-            return self.queue_benchmark(
-                remaining,
-                false,
-                Some(benchmark_started_at),
-                "Continue interrupted benchmarks".into(),
-            );
+        if resume_incomplete && let Some(job_id) = self.queue_incomplete_benchmark(&snapshot)? {
+            return Ok(job_id);
         }
         self.queue_scan(
             None,
@@ -435,6 +463,7 @@ impl ProfilerEngine {
         if let Ok(mut active) = self.inner.active_jobs.lock() {
             active.clear();
         }
+        self.inner.profile_after_scan.clear();
     }
 
     async fn run_localhost_discovery(&self, job_id: String) {
@@ -650,7 +679,8 @@ impl ProfilerEngine {
                 format!("Scan {} server inventories", ids.len())
             }
         });
-        let job_id = self.create_job(JobKind::Scan, label, ids.len())?;
+        let job_id =
+            self.create_job_with_context(JobKind::Scan, label, ids.len(), ids.clone(), None)?;
         let engine = self.clone();
         let task_id = job_id.clone();
         tauri::async_runtime::spawn(async move {
@@ -663,7 +693,7 @@ impl ProfilerEngine {
         if self.set_job_running(&job_id).is_err() {
             return;
         }
-        let ready = Arc::new(Mutex::new(Vec::<String>::new()));
+        let successful = Arc::new(Mutex::new(Vec::<String>::new()));
         run_with_dynamic_concurrency(
             server_ids,
             self.inner.settings_changed.subscribe(),
@@ -675,8 +705,7 @@ impl ProfilerEngine {
             |server_id| {
                 let engine = self.clone();
                 let job_id = job_id.clone();
-                let ready = ready.clone();
-                let options = options.clone();
+                let successful = successful.clone();
                 async move {
                     if engine.inner.shutting_down.load(Ordering::Relaxed) {
                         return;
@@ -684,18 +713,7 @@ impl ProfilerEngine {
                     let lock = engine.server_lock(&server_id).await;
                     let _guard = lock.lock().await;
                     if engine.scan_one_server(&server_id).await
-                        && options.benchmark_after_scan
-                        && engine
-                            .get_snapshot()
-                            .ok()
-                            .and_then(|snapshot| {
-                                snapshot
-                                    .servers
-                                    .into_iter()
-                                    .find(|server| server.id == server_id)
-                            })
-                            .is_some_and(|server| is_server_ready_for_benchmark(&server))
-                        && let Ok(mut values) = ready.lock()
+                        && let Ok(mut values) = successful.lock()
                     {
                         values.push(server_id.clone());
                     }
@@ -705,18 +723,101 @@ impl ProfilerEngine {
         )
         .await;
         let _ = self.finish_job(&job_id, JobStatus::Completed, None, None);
-        let ready = ready
+        let successful = successful
             .lock()
             .map(|values| values.clone())
             .unwrap_or_default();
-        if !self.inner.shutting_down.load(Ordering::Relaxed) && !ready.is_empty() {
-            let _ = self.queue_benchmark(
-                ready,
-                options.force_benchmark,
-                None,
-                "Benchmark all approved local models".into(),
-            );
+        if self.inner.shutting_down.load(Ordering::Relaxed) {
+            return;
         }
+        let deferred_profile = self.take_deferred_profile(&job_id).ok().flatten();
+        if let Some(resume_incomplete) = deferred_profile {
+            let snapshot = match self.get_snapshot() {
+                Ok(snapshot) => snapshot,
+                Err(_) => return,
+            };
+            if resume_incomplete
+                && self
+                    .queue_incomplete_benchmark(&snapshot)
+                    .ok()
+                    .flatten()
+                    .is_some()
+            {
+                return;
+            }
+            let ready = benchmark_ready_after_scan(&snapshot, &successful);
+            if !ready.is_empty() {
+                let _ = self.queue_benchmark(
+                    ready,
+                    true,
+                    None,
+                    "Benchmark all approved local models".into(),
+                );
+            }
+        } else if options.benchmark_after_scan
+            && let Ok(snapshot) = self.get_snapshot()
+        {
+            let ready = benchmark_ready_after_scan(&snapshot, &successful);
+            if !ready.is_empty() {
+                let _ = self.queue_benchmark(
+                    ready,
+                    options.force_benchmark,
+                    None,
+                    "Benchmark all approved local models".into(),
+                );
+            }
+        }
+    }
+
+    fn queue_incomplete_benchmark(&self, snapshot: &ProfilerSnapshot) -> AppResult<Option<String>> {
+        let Some(previous) = latest_incomplete_benchmark(snapshot).cloned() else {
+            return Ok(None);
+        };
+        let benchmark_started_at = previous
+            .benchmark_started_at
+            .unwrap_or_else(|| previous.created_at.clone());
+        let targets: HashSet<String> = if previous.target_server_ids.is_empty() {
+            snapshot
+                .servers
+                .iter()
+                .map(|server| server.id.clone())
+                .collect()
+        } else {
+            previous.target_server_ids.into_iter().collect()
+        };
+        let remaining = snapshot
+            .servers
+            .iter()
+            .filter(|server| {
+                targets.contains(&server.id)
+                    && server.models.iter().any(|model| {
+                        is_benchmarkable_local_model(model)
+                            && !was_benchmarked_since(model, &benchmark_started_at)
+                    })
+            })
+            .map(|server| server.id.clone())
+            .collect();
+        self.queue_benchmark(
+            remaining,
+            false,
+            Some(benchmark_started_at),
+            "Continue interrupted benchmarks".into(),
+        )
+        .map(Some)
+    }
+
+    fn defer_profile_until_scan_finishes(
+        &self,
+        scan_job_id: &str,
+        resume_incomplete: bool,
+    ) -> AppResult<()> {
+        self.inner
+            .profile_after_scan
+            .defer(scan_job_id, resume_incomplete)
+    }
+
+    fn take_deferred_profile(&self, scan_job_id: &str) -> AppResult<Option<bool>> {
+        self.inner.profile_after_scan.take(scan_job_id)
     }
 
     async fn scan_one_server(&self, server_id: &str) -> bool {
@@ -1335,6 +1436,21 @@ fn is_server_ready_for_benchmark(server: &ServerRecord) -> bool {
         && server.models.iter().any(is_benchmarkable_local_model)
 }
 
+fn benchmark_ready_after_scan(
+    snapshot: &ProfilerSnapshot,
+    successful_server_ids: &[String],
+) -> Vec<String> {
+    let successful: HashSet<&str> = successful_server_ids.iter().map(String::as_str).collect();
+    snapshot
+        .servers
+        .iter()
+        .filter(|server| {
+            successful.contains(server.id.as_str()) && is_server_ready_for_benchmark(server)
+        })
+        .map(|server| server.id.clone())
+        .collect()
+}
+
 fn failed_benchmark(error: OllamaClientError, started_at: String) -> BenchmarkResult {
     BenchmarkResult {
         id: Uuid::new_v4().to_string(),
@@ -1459,6 +1575,85 @@ mod tests {
                 error_message: None,
             }],
         }
+    }
+
+    fn benchmark_server(id: &str, status: ServerStatus, approved: bool) -> ServerRecord {
+        ServerRecord {
+            id: id.into(),
+            endpoint: format!("http://{id}:11434"),
+            source: DiscoverySource::Manual,
+            discovery_sources: vec![DiscoverySource::Manual],
+            ip: None,
+            country: None,
+            region: None,
+            city: None,
+            asn: None,
+            organization: None,
+            source_updated_at: None,
+            status,
+            ollama_version: Some("0.11.0".into()),
+            failure_count: 0,
+            benchmark_approved: approved,
+            first_discovered_at: "2026-07-25T00:00:00Z".into(),
+            last_discovered_at: "2026-07-26T00:00:00Z".into(),
+            last_checked_at: Some("2026-07-26T00:00:00Z".into()),
+            last_online_at: Some("2026-07-26T00:00:00Z".into()),
+            last_error_code: None,
+            last_error_message: None,
+            models: vec![benchmark_model("2026-07-26T00:02:00Z")],
+        }
+    }
+
+    #[test]
+    fn launch_scan_is_inventory_only_until_a_benchmark_is_requested() {
+        let options = ScanOptions::launch();
+
+        assert!(!options.benchmark_after_scan);
+        assert!(!options.force_benchmark);
+        assert_eq!(
+            options.label.as_deref(),
+            Some("Check all servers on launch")
+        );
+    }
+
+    #[test]
+    fn deferred_profile_request_is_consumed_after_the_active_scan() {
+        let requests = DeferredProfileRequests::default();
+
+        requests.defer("launch-scan", false).unwrap();
+
+        assert_eq!(requests.take("launch-scan").unwrap(), Some(false));
+        assert_eq!(requests.take("launch-scan").unwrap(), None);
+    }
+
+    #[test]
+    fn starting_over_wins_when_a_scan_receives_multiple_benchmark_requests() {
+        let requests = DeferredProfileRequests::default();
+
+        requests.defer("launch-scan", true).unwrap();
+        requests.defer("launch-scan", false).unwrap();
+        requests.defer("launch-scan", true).unwrap();
+
+        assert_eq!(requests.take("launch-scan").unwrap(), Some(false));
+    }
+
+    #[test]
+    fn benchmarks_only_successfully_scanned_ready_servers() {
+        let mut snapshot = ProfilerSnapshot::empty("2026-07-26T00:00:00Z".into());
+        snapshot.servers = vec![
+            benchmark_server("ready", ServerStatus::Online, true),
+            benchmark_server("not-approved", ServerStatus::Online, false),
+            benchmark_server("offline", ServerStatus::Offline, true),
+            benchmark_server("not-scanned", ServerStatus::Online, true),
+        ];
+
+        assert_eq!(
+            benchmark_ready_after_scan(
+                &snapshot,
+                &["ready".into(), "not-approved".into(), "offline".into()]
+            ),
+            vec!["ready"]
+        );
     }
 
     #[test]

@@ -227,6 +227,7 @@ pub fn run() {
             let store = ProfilerStore::load(store_path)?;
             let engine = ProfilerEngine::new(app.handle().clone(), store);
             engine.start_monitoring();
+            let _ = engine.scan_all_servers_on_launch();
             app.manage(engine);
             install_menu(app)?;
             Ok(())

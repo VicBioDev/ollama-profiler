@@ -47,6 +47,17 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
   const localOnline = snapshot?.servers.some(
     (server) => isLocalDiscoveryServer(server) && server.status === 'online'
   )
+  const activeScan = snapshot?.jobs.find(
+    (job) =>
+      job.kind === 'scan' &&
+      (job.status === 'queued' || job.status === 'running')
+  )
+  const benchmarkAfterScanAvailable = Boolean(
+    activeScan &&
+      snapshot?.servers.every((server) =>
+        activeScan.targetServerIds?.includes(server.id)
+      )
+  )
 
   const navigate = (target: PageId): void => {
     setPage(target)
@@ -98,6 +109,7 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
       />
       <div className="main-shell">
         <TopBar
+          benchmarkAfterScanAvailable={benchmarkAfterScanAvailable}
           busy={busy}
           jobs={snapshot.jobs}
           profileAction={profileAction}

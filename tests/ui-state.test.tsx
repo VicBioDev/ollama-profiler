@@ -465,9 +465,10 @@ describe('state-driven interface', () => {
     expect(serverContext).not.toContain('Re-run benchmark')
   })
 
-  it('shows the current profiling stage and prevents duplicate global actions', () => {
+  it('queues benchmarks during scans and prevents duplicate benchmark actions', () => {
     const scanning = renderToStaticMarkup(
       <TopBar
+        benchmarkAfterScanAvailable
         busy={false}
         jobs={[
           {
@@ -483,6 +484,27 @@ describe('state-driven interface', () => {
               { completed: 0, recordedAt: '2026-07-26T00:00:00.000Z' },
               { completed: 1, recordedAt: '2026-07-26T00:00:06.000Z' }
             ]
+          }
+        ]}
+        profileAction={{
+          label: 'Scan & benchmark all',
+          onClick: () => undefined
+        }}
+      />
+    )
+    const partialScan = renderToStaticMarkup(
+      <TopBar
+        busy={false}
+        jobs={[
+          {
+            id: 'partial-scan-job',
+            kind: 'scan',
+            status: 'running',
+            label: 'Scan server inventory',
+            completed: 0,
+            total: 1,
+            createdAt: '2026-07-26T00:00:00.000Z',
+            updatedAt: '2026-07-26T00:00:00.000Z'
           }
         ]}
         profileAction={{
@@ -515,8 +537,10 @@ describe('state-driven interface', () => {
 
     expect(scanning).toContain('Scan all servers · 1/2')
     expect(scanning).toContain('&lt;10s remaining')
-    expect(scanning).toContain('Scanning all…')
-    expect(scanning.match(/disabled/g)?.length).toBe(1)
+    expect(scanning).toContain('Benchmark after scan')
+    expect(scanning).not.toContain('disabled')
+    expect(partialScan).toContain('Scanning all…')
+    expect(partialScan.match(/disabled/g)?.length).toBe(1)
     expect(benchmarking).toContain('Re-run benchmarks for 2 servers · 1/2')
     expect(benchmarking).toContain('Benchmarking all…')
     expect(benchmarking.match(/disabled/g)?.length).toBe(1)
