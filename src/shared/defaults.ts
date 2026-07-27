@@ -2,7 +2,7 @@ import type { AppSettings } from './types.js'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   scanConcurrency: 8,
-  benchmarkConcurrency: 4,
+  benchmarkConcurrency: 8,
   connectTimeoutMs: 5_000,
   requestTimeoutMs: 15_000,
   benchmarkTimeoutMs: 120_000,

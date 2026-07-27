@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+const CONCURRENCY_LEVELS: [usize; 5] = [8, 16, 32, 64, 128];
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum DiscoverySource {
@@ -217,7 +219,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             scan_concurrency: 8,
-            benchmark_concurrency: 4,
+            benchmark_concurrency: 8,
             connect_timeout_ms: 5_000,
             request_timeout_ms: 15_000,
             benchmark_timeout_ms: 120_000,
@@ -249,14 +251,14 @@ pub struct AppSettingsPatch {
 impl AppSettings {
     pub fn apply_patch(&self, patch: AppSettingsPatch) -> Self {
         Self {
-            scan_concurrency: patch
-                .scan_concurrency
-                .unwrap_or(self.scan_concurrency)
-                .clamp(1, 32),
-            benchmark_concurrency: patch
-                .benchmark_concurrency
-                .unwrap_or(self.benchmark_concurrency)
-                .clamp(1, 32),
+            scan_concurrency: patch.scan_concurrency.map_or_else(
+                || normalize_concurrency(self.scan_concurrency),
+                normalize_concurrency,
+            ),
+            benchmark_concurrency: patch.benchmark_concurrency.map_or_else(
+                || normalize_concurrency(self.benchmark_concurrency),
+                normalize_concurrency,
+            ),
             connect_timeout_ms: patch
                 .connect_timeout_ms
                 .unwrap_or(self.connect_timeout_ms)
@@ -293,6 +295,19 @@ impl AppSettings {
                 .unwrap_or(self.allow_private_networks),
         }
     }
+}
+
+fn normalize_concurrency(value: usize) -> usize {
+    let mut closest = CONCURRENCY_LEVELS[0];
+    let mut closest_distance = closest.abs_diff(value);
+    for option in CONCURRENCY_LEVELS.into_iter().skip(1) {
+        let distance = option.abs_diff(value);
+        if distance < closest_distance {
+            closest = option;
+            closest_distance = distance;
+        }
+    }
+    closest
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -430,11 +445,11 @@ pub struct OllamaInventory {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppSettings, AppSettingsPatch};
+    use super::{AppSettings, AppSettingsPatch, CONCURRENCY_LEVELS};
 
     #[test]
     fn settings_accept_every_supported_concurrency_level() {
-        for concurrency in [2, 4, 8, 16, 32] {
+        for concurrency in CONCURRENCY_LEVELS {
             let settings = AppSettings::default().apply_patch(AppSettingsPatch {
                 scan_concurrency: Some(concurrency),
                 benchmark_concurrency: Some(concurrency),
@@ -443,6 +458,20 @@ mod tests {
 
             assert_eq!(settings.scan_concurrency, concurrency);
             assert_eq!(settings.benchmark_concurrency, concurrency);
+        }
+    }
+
+    #[test]
+    fn settings_normalize_legacy_concurrency_to_the_nearest_level() {
+        for (legacy, expected) in [(2, 8), (10, 8), (12, 8), (15, 16), (48, 32), (200, 128)] {
+            let settings = AppSettings::default().apply_patch(AppSettingsPatch {
+                scan_concurrency: Some(legacy),
+                benchmark_concurrency: Some(legacy),
+                ..AppSettingsPatch::default()
+            });
+
+            assert_eq!(settings.scan_concurrency, expected);
+            assert_eq!(settings.benchmark_concurrency, expected);
         }
     }
 }

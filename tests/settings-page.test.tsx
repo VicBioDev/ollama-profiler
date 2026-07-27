@@ -87,16 +87,22 @@ describe('benchmark controls', () => {
       )
     ]
 
-    expect(scanOptions.map(({ value }) => value)).toEqual(['2', '4', '8', '16', '32'])
-    expect(benchmarkOptions.map(({ value }) => value)).toEqual([
-      '2',
-      '4',
+    expect(scanOptions.map(({ value }) => value)).toEqual([
       '8',
       '16',
-      '32'
+      '32',
+      '64',
+      '128'
+    ])
+    expect(benchmarkOptions.map(({ value }) => value)).toEqual([
+      '8',
+      '16',
+      '32',
+      '64',
+      '128'
     ])
     expect(scanOptions.find(({ checked }) => checked)?.value).toBe('8')
-    expect(benchmarkOptions.find(({ checked }) => checked)?.value).toBe('4')
+    expect(benchmarkOptions.find(({ checked }) => checked)?.value).toBe('8')
     expect(container.textContent).toContain('Saved changes apply to running jobs')
   })
 
@@ -112,23 +118,23 @@ describe('benchmark controls', () => {
       )
     })
 
-    const scan32 = container.querySelector<HTMLInputElement>(
-      'input[name="scanConcurrency"][value="32"]'
+    const scan128 = container.querySelector<HTMLInputElement>(
+      'input[name="scanConcurrency"][value="128"]'
     )
-    const benchmark16 = container.querySelector<HTMLInputElement>(
-      'input[name="benchmarkConcurrency"][value="16"]'
+    const benchmark64 = container.querySelector<HTMLInputElement>(
+      'input[name="benchmarkConcurrency"][value="64"]'
     )
     const prompt = container.querySelector<HTMLTextAreaElement>('textarea')
     const save = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
       ({ textContent }) => textContent?.includes('Save settings')
     )
-    if (!scan32 || !benchmark16 || !prompt || !save) {
+    if (!scan128 || !benchmark64 || !prompt || !save) {
       throw new Error('Expected settings controls are unavailable')
     }
 
     await act(async () => {
-      scan32.click()
-      benchmark16.click()
+      scan128.click()
+      benchmark64.click()
       setTextAreaValue(prompt, 'Explain why deterministic benchmarks matter.')
     })
     await act(async () => {
@@ -137,8 +143,8 @@ describe('benchmark controls', () => {
 
     expect(onSaveSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        scanConcurrency: 32,
-        benchmarkConcurrency: 16,
+        scanConcurrency: 128,
+        benchmarkConcurrency: 64,
         benchmarkPrompt: 'Explain why deterministic benchmarks matter.'
       })
     )

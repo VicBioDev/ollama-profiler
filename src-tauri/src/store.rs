@@ -1,5 +1,5 @@
 use crate::error::{AppError, AppResult};
-use crate::types::{JobStatus, ProfilerSnapshot};
+use crate::types::{AppSettingsPatch, JobStatus, ProfilerSnapshot};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -69,6 +69,10 @@ impl ProfilerStore {
     }
 
     fn normalize_loaded_state(&mut self) {
+        self.snapshot.settings = self
+            .snapshot
+            .settings
+            .apply_patch(AppSettingsPatch::default());
         let now = Utc::now().to_rfc3339();
         for job in self.snapshot.jobs.iter_mut().take(50) {
             let interrupted = matches!(job.status, JobStatus::Queued | JobStatus::Running)
@@ -174,6 +178,8 @@ mod tests {
         fs::create_dir_all(&directory).unwrap();
 
         let mut snapshot = ProfilerSnapshot::empty("2026-07-25T00:00:00Z".into());
+        snapshot.settings.scan_concurrency = 2;
+        snapshot.settings.benchmark_concurrency = 4;
         snapshot.jobs.push(ProfilerJob {
             id: "running-job".into(),
             kind: JobKind::Scan,
@@ -201,6 +207,8 @@ mod tests {
             loaded.jobs[0].summary.as_deref(),
             Some("Cancelled because the application closed.")
         );
+        assert_eq!(loaded.settings.scan_concurrency, 8);
+        assert_eq!(loaded.settings.benchmark_concurrency, 8);
 
         fs::remove_dir_all(directory).unwrap();
     }

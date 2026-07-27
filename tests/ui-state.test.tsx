@@ -23,7 +23,7 @@ import {
 
 const settings: ProfilerSnapshot['settings'] = {
   scanConcurrency: 8,
-  benchmarkConcurrency: 4,
+  benchmarkConcurrency: 8,
   connectTimeoutMs: 5_000,
   requestTimeoutMs: 15_000,
   benchmarkTimeoutMs: 120_000,

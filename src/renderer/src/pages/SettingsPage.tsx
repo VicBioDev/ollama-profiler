@@ -2,7 +2,7 @@ import { MessageSquareText, Save, Shield, Workflow } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AppSettings } from '@shared/types'
 
-const CONCURRENCY_OPTIONS = [2, 4, 8, 16, 32] as const
+const CONCURRENCY_OPTIONS = [8, 16, 32, 64, 128] as const
 
 interface SettingsPageProps {
   readonly settings: AppSettings

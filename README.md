@@ -25,8 +25,9 @@ with no Docker, database service, or background web service required.
 - In each run, benchmark every installed, generation-capable, non-Cloud local
   model on a server; jobs on the same server are strictly sequential, so scans
   and model benchmarks never overlap
-- Process different servers concurrently: inventory scans default to 8 servers
-  and benchmarks to 4; Settings offers 2, 4, 8, 16, or 32 workers for each task
+- Process different servers concurrently: inventory scans and benchmarks default
+  to 8 servers; Settings offers 8, 16, 32, 64, or 128 workers for each task, and
+  legacy custom values migrate to the nearest supported level
 - Apply concurrency changes to active scans and benchmarks immediately; increases
   fill new slots at once, while decreases let in-flight requests finish and then
   enforce the lower limit
