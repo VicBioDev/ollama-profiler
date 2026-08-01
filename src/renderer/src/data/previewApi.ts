@@ -225,6 +225,7 @@ export function createPreviewApi(): DesktopApi {
     platform: 'darwin',
     getSnapshot: async () => snapshot,
     subscribe: () => () => undefined,
+    subscribeToPatch: () => () => undefined,
     subscribeToNavigation: () => () => undefined,
     selectImportFile: async () => preview,
     previewText: async () => preview,
@@ -253,6 +254,7 @@ export function createPreviewApi(): DesktopApi {
               : 'This response ran independently on a different Ollama server.'
         }
       })
-    })
+    }),
+    writeClipboardText: (text) => navigator.clipboard.writeText(text)
   }
 }

@@ -117,6 +117,12 @@ export interface ProfilerSnapshot {
   updatedAt: string
 }
 
+export interface ProfilerPatch {
+  servers?: ServerRecord[]
+  jobs?: ProfilerJob[]
+  updatedAt: string
+}
+
 export interface ImportIssue {
   row: number
   message: string
@@ -189,6 +195,7 @@ export interface DesktopApi {
   readonly platform: string
   getSnapshot: () => Promise<ProfilerSnapshot>
   subscribe: (listener: (snapshot: ProfilerSnapshot) => void) => () => void
+  subscribeToPatch: (listener: (patch: ProfilerPatch) => void) => () => void
   subscribeToNavigation: (
     listener: (target: DesktopNavigationTarget) => void
   ) => () => void
@@ -206,4 +213,5 @@ export interface DesktopApi {
     options: ServerExportOptions
   ) => Promise<ServerExportResult | null>
   chatModels: (request: ChatRequest) => Promise<ChatResponse>
+  writeClipboardText: (text: string) => Promise<void>
 }

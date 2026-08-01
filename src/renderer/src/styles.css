@@ -883,6 +883,11 @@ tbody tr.selected-row {
   border-color: rgba(105, 232, 174, 0.3);
 }
 
+.copy-address-button.failed {
+  color: var(--red);
+  border-color: rgba(255, 111, 111, 0.38);
+}
+
 .copy-address-button.labeled {
   width: auto;
   height: 32px;

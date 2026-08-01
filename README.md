@@ -20,7 +20,8 @@ with no Docker, database service, or background web service required.
 - Check every saved server as soon as the application opens. If a full
   benchmark is requested while that launch scan is still running, reuse its
   results and start benchmarking immediately after it finishes instead of
-  scanning twice
+  scanning twice. Large scans batch incremental interface updates and local
+  checkpoints so the rest of the application stays responsive
 - For explicitly authorized servers, benchmark the streaming `/api/generate`
   endpoint and measure:
   - Generation speed using `eval_count × 1e9 / eval_duration`
@@ -60,7 +61,8 @@ with no Docker, database service, or background web service required.
   delete them in bulk or export CSV; exports include Endpoint, city/country
   Region, and TPS, using the selected model's speed when an exact model is
   filtered or each server's highest speed otherwise
-- Copy a server endpoint directly from any server list or its detail page.
+- Copy a server endpoint through the native system clipboard from any server
+  list or its detail page, with visible success or failure feedback.
   Hover or focus a list's model count to inspect every installed model name, or
   its best speed to see which model produced that result
 - Paginate the server list at 50 servers per page while preserving selection
