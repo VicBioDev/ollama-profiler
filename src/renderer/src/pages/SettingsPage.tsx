@@ -1,4 +1,4 @@
-import { MessageSquareText, Save, Shield, Workflow } from 'lucide-react'
+import { AlertTriangle, Gauge, MessageSquareText, Save, Shield, Workflow } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AppSettings } from '@shared/types'
 
@@ -59,6 +59,16 @@ export function SettingsPage({
     setDraft((current) => ({ ...current, benchmarkPrompt: value }))
   }
 
+  const useResourceSaver = (): void => {
+    setNotice(undefined)
+    setDraft((current) => ({
+      ...current,
+      scanConcurrency: 32,
+      benchmarkConcurrency: 8,
+      benchmarkNumPredict: '32'
+    }))
+  }
+
   const restoreEmptyNumber = (key: EditableNumberKey): void => {
     setDraft((current) =>
       current[key].trim()
@@ -112,6 +122,16 @@ export function SettingsPage({
               values. Saved changes apply to running jobs; lower limits take effect as
               in-flight requests finish.
             </p>
+            <div className="resource-preset">
+              <div>
+                <strong>Resource saver</strong>
+                <small>32 scans · 8 benchmarks · 32 generated tokens</small>
+              </div>
+              <button className="button secondary" onClick={useResourceSaver} type="button">
+                <Gauge size={14} />
+                Use preset
+              </button>
+            </div>
           </div>
         </article>
 
@@ -264,6 +284,12 @@ function ConcurrencyPicker({
   onChange,
   value
 }: Readonly<ConcurrencyPickerProps>): React.JSX.Element {
+  const pressureWarning =
+    value === 128
+      ? '128 parallel tasks can put extremely heavy pressure on this system and the target servers.'
+      : value === 64
+        ? '64 parallel tasks can put heavy pressure on this system and the target servers.'
+        : undefined
   return (
     <fieldset className="concurrency-picker">
       <legend>{label}</legend>
@@ -282,6 +308,12 @@ function ConcurrencyPicker({
         ))}
       </div>
       <small>servers at once</small>
+      {pressureWarning ? (
+        <small className="concurrency-warning" role="alert">
+          <AlertTriangle aria-hidden="true" size={13} />
+          {pressureWarning}
+        </small>
+      ) : null}
     </fieldset>
   )
 }

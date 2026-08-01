@@ -1,9 +1,10 @@
 use crate::error::{AppError, AppResult};
+use crate::model::prune_benchmark_history;
 use crate::types::{AppSettingsPatch, JobStatus, ProfilerSnapshot};
-use chrono::{DateTime, Duration, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
@@ -11,6 +12,13 @@ use std::path::{Path, PathBuf};
 struct PersistedDocument {
     schema_version: u8,
     snapshot: ProfilerSnapshot,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedDocumentRef<'a> {
+    schema_version: u8,
+    snapshot: &'a ProfilerSnapshot,
 }
 
 pub struct ProfilerStore {
@@ -103,7 +111,7 @@ impl ProfilerStore {
         }
         self.snapshot.jobs.truncate(50);
 
-        let cutoff = Utc::now() - Duration::days(90);
+        let now = Utc::now();
         for server in &mut self.snapshot.servers {
             if server.status == crate::types::ServerStatus::Checking {
                 server.status = crate::types::ServerStatus::Unknown;
@@ -112,11 +120,7 @@ impl ProfilerStore {
                 server.discovery_sources.push(server.source.clone());
             }
             for model in &mut server.models {
-                model.benchmarks.retain(|result| {
-                    DateTime::parse_from_rfc3339(&result.finished_at)
-                        .map(|value| value.with_timezone(&Utc) >= cutoff)
-                        .unwrap_or(false)
-                });
+                prune_benchmark_history(model, now);
             }
         }
     }
@@ -128,19 +132,17 @@ impl ProfilerStore {
             .ok_or_else(|| AppError::message("Application data path has no parent"))?;
         fs::create_dir_all(parent)?;
         let temporary_path = self.path.with_extension("json.tmp");
-        let document = PersistedDocument {
+        let document = PersistedDocumentRef {
             schema_version: 1,
-            snapshot: self.snapshot.clone(),
+            snapshot: &self.snapshot,
         };
-        let mut contents = serde_json::to_vec_pretty(&document)?;
-        contents.push(b'\n');
-        write_private_file(&temporary_path, &contents)?;
+        write_private_document(&temporary_path, &document)?;
         fs::rename(temporary_path, &self.path)?;
         Ok(())
     }
 }
 
-fn write_private_file(path: &Path, contents: &[u8]) -> AppResult<()> {
+fn write_private_document(path: &Path, document: &PersistedDocumentRef<'_>) -> AppResult<()> {
     let mut options = fs::OpenOptions::new();
     options.create(true).truncate(true).write(true);
     #[cfg(unix)]
@@ -148,9 +150,12 @@ fn write_private_file(path: &Path, contents: &[u8]) -> AppResult<()> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(path)?;
-    file.write_all(contents)?;
-    file.sync_all()?;
+    let file = options.open(path)?;
+    let mut writer = BufWriter::new(file);
+    serde_json::to_writer(&mut writer, document)?;
+    writer.write_all(b"\n")?;
+    writer.flush()?;
+    writer.get_ref().sync_all()?;
     Ok(())
 }
 
@@ -257,6 +262,23 @@ mod tests {
         let checkpointed: PersistedDocument =
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(checkpointed.snapshot.settings.scan_concurrency, 32);
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn persists_compact_json_without_indentation() {
+        let directory =
+            std::env::temp_dir().join(format!("ollama-profiler-store-{}", Uuid::new_v4()));
+        let path = directory.join("profiler-data.json");
+
+        let store = ProfilerStore::load(path.clone()).unwrap();
+        store.persist().unwrap();
+        let contents = fs::read_to_string(&path).unwrap();
+
+        assert_eq!(contents.lines().count(), 1);
+        assert!(contents.ends_with('\n'));
+        assert!(!contents.contains("\n  \""));
 
         fs::remove_dir_all(directory).unwrap();
     }

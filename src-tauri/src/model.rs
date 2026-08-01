@@ -2,6 +2,7 @@ use crate::types::{BenchmarkStatus, ServerModel, ServerRecord};
 use chrono::{DateTime, Duration, Utc};
 
 const FAILURE_BACKOFF_HOURS: [i64; 4] = [1, 6, 24, 72];
+pub const MAX_BENCHMARK_HISTORY_PER_MODEL: usize = 100;
 
 pub fn is_cloud_model_name(name: &str) -> bool {
     let normalized = name.trim().to_ascii_lowercase();
@@ -54,6 +55,16 @@ pub fn is_benchmark_due(model: &ServerModel, server: &ServerRecord, now: DateTim
         .max(1);
     let hours = FAILURE_BACKOFF_HOURS[(failures - 1).min(FAILURE_BACKOFF_HOURS.len() - 1)];
     elapsed >= Duration::hours(hours)
+}
+
+pub fn prune_benchmark_history(model: &mut ServerModel, now: DateTime<Utc>) {
+    let cutoff = now - Duration::days(90);
+    model.benchmarks.retain(|result| {
+        DateTime::parse_from_rfc3339(&result.finished_at)
+            .map(|value| value.with_timezone(&Utc) >= cutoff)
+            .unwrap_or(false)
+    });
+    model.benchmarks.truncate(MAX_BENCHMARK_HISTORY_PER_MODEL);
 }
 
 #[cfg(test)]
@@ -148,5 +159,30 @@ mod tests {
             "2026-07-24T11:00:00Z",
         )]);
         assert!(is_benchmark_due(&old, &server(old.clone()), now));
+    }
+
+    #[test]
+    fn prunes_expired_and_excess_benchmark_history() {
+        let mut value = model(
+            (0..120)
+                .map(|_| result(BenchmarkStatus::Success, "2026-07-24T13:00:00Z"))
+                .collect(),
+        );
+        value
+            .benchmarks
+            .push(result(BenchmarkStatus::Failed, "2026-01-01T00:00:00Z"));
+        let now = DateTime::parse_from_rfc3339("2026-08-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        prune_benchmark_history(&mut value, now);
+
+        assert_eq!(value.benchmarks.len(), MAX_BENCHMARK_HISTORY_PER_MODEL);
+        assert!(
+            value
+                .benchmarks
+                .iter()
+                .all(|result| result.finished_at != "2026-01-01T00:00:00Z")
+        );
     }
 }

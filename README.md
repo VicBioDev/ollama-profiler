@@ -16,12 +16,16 @@ with no Docker, database service, or background web service required.
 - Test `localhost:11434` with one click and discover Ollama instances on the
   current private LAN
 - Sync versions and complete model capabilities through `/api/version`,
-  `/api/tags`, and `/api/show`
+  `/api/tags`, and `/api/show`; requests to the same server reuse one
+  security-pinned HTTP session, and unchanged model digests reuse cached details
+  instead of repeating `/api/show`
 - Check every saved server as soon as the application opens. If a full
   benchmark is requested while that launch scan is still running, reuse its
   results and start benchmarking immediately after it finishes instead of
   scanning twice. Large scans batch incremental interface updates and local
   checkpoints so the rest of the application stays responsive
+- Batch benchmark persistence and send server/job patches instead of rewriting
+  and broadcasting the complete local snapshot after every model result
 - For explicitly authorized servers, benchmark the streaming `/api/generate`
   endpoint and measure:
   - Generation speed using `eval_count × 1e9 / eval_duration`
@@ -32,7 +36,9 @@ with no Docker, database service, or background web service required.
   and model benchmarks never overlap
 - Process different servers concurrently: inventory scans and benchmarks default
   to 8 servers; Settings offers 8, 16, 32, 64, or 128 workers for each task, and
-  legacy custom values migrate to the nearest supported level
+  legacy custom values migrate to the nearest supported level. Selecting 64 or
+  128 shows a system-pressure warning, and a resource-saving preset selects 32
+  scans, 8 benchmarks, and 32 generated tokens
 - Apply concurrency changes to active scans and benchmarks immediately; increases
   fill new slots at once, while decreases let in-flight requests finish and then
   enforce the lower limit
@@ -47,7 +53,7 @@ with no Docker, database service, or background web service required.
 - Keep scanning and benchmarking explicit: launch and manual scans refresh only
   the version and model inventory, while a separate button starts benchmarks
 - Preserve the latest successful speed when a newer benchmark fails; keep
-  benchmark history locally for 90 days
+  benchmark history locally for 90 days and at most 100 results per model
 - Search models with suggestions and filter servers by status and country-level
   region; after selecting an exact model, the speed column shows its name and
   displays and sorts only that model's latest successful speed. Search terms,
@@ -72,8 +78,10 @@ with no Docker, database service, or background web service required.
   omitting the model name when no exact model is selected
 - Clearly label and skip Ollama Cloud models such as `:cloud` and `*-cloud`,
   benchmarking only generation models that run locally on the target server
-- Refresh inventory every hour, re-benchmark successful results after 24 hours,
-  and retry failures with 1/6/24/72-hour backoff
+- Refresh healthy inventory every hour with at most 16 background workers;
+  retry unreachable inventory with 1/6/24/72-hour backoff. Re-benchmark
+  successful results after 24 hours and apply the same failure backoff to
+  generation attempts
 - Deduplicate Scan and Benchmark jobs of the same type; on a normal application
   exit, mark running jobs as canceled instead of ordinary benchmark failures;
   on the next launch, offer to continue unfinished benchmarks, start over, or
@@ -100,6 +108,9 @@ with no Docker, database service, or background web service required.
   for generation benchmarks by default.
 - FOFA and Shodan are supported only as local export file formats; the
   application does not connect to their search, map, or other APIs.
+- Local state is written as compact streaming JSON. Scan and benchmark jobs use
+  bounded checkpoints plus a final durable write instead of rewriting the full
+  snapshot for every incremental result.
 
 Do not test servers that you do not own or are not authorized to use. Public
 accessibility does not imply permission to consume a server's compute resources.

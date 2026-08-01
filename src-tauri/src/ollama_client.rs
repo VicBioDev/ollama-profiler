@@ -1,14 +1,17 @@
 use crate::types::{
-    AppSettings, BenchmarkResult, BenchmarkStatus, OllamaInventory, OllamaModelDetails,
+    AppSettings, BenchmarkResult, BenchmarkStatus, OllamaInventory, OllamaModelDetails, ServerModel,
 };
 use chrono::Utc;
 use futures_util::StreamExt;
 use reqwest::{Client, Method, Response, redirect::Policy};
 use serde_json::{Map, Value, json};
+use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::net::lookup_host;
+use tokio::sync::OnceCell;
 use url::{Host, Url};
 use uuid::Uuid;
 
@@ -34,11 +37,21 @@ pub type ClientResult<T> = Result<T, OllamaClientError>;
 pub struct OllamaClient {
     endpoint: String,
     settings: AppSettings,
+    session: Arc<OnceCell<ClientSession>>,
+}
+
+struct ClientSession {
+    client: Client,
+    resolved: SocketAddr,
 }
 
 impl OllamaClient {
     pub fn new(endpoint: String, settings: AppSettings) -> Self {
-        Self { endpoint, settings }
+        Self {
+            endpoint,
+            settings,
+            session: Arc::new(OnceCell::new()),
+        }
     }
 
     pub async fn probe_version(&self) -> ClientResult<String> {
@@ -48,7 +61,11 @@ impl OllamaClient {
         })
     }
 
-    pub async fn inventory(&self) -> ClientResult<OllamaInventory> {
+    pub async fn inventory(
+        &self,
+        previous_models: &[ServerModel],
+        previous_version: Option<&str>,
+    ) -> ClientResult<OllamaInventory> {
         let version = self.probe_version().await?;
         let tags = self.request_json("/api/tags", None).await?;
         let raw_models = tags
@@ -58,6 +75,10 @@ impl OllamaClient {
                 OllamaClientError::new("invalid_tags", "Ollama did not return a model list")
             })?;
         let mut models = Vec::new();
+        let previous_by_name = previous_models
+            .iter()
+            .map(|model| (model.name.as_str(), model))
+            .collect::<HashMap<_, _>>();
 
         for raw_tag in raw_models {
             let Some(tag) = raw_tag.as_object() else {
@@ -69,16 +90,28 @@ impl OllamaClient {
             if name.len() > 512 || name.contains('\0') {
                 continue;
             }
-            let show = match self
-                .request_json(
-                    "/api/show",
-                    Some(json!({ "model": name, "verbose": false })),
-                )
-                .await
-            {
-                Ok(value) => value,
-                Err(error) if error.code == "http_404" => continue,
-                Err(_) => Map::new(),
+            let digest = string_value(tag.get("digest"));
+            let cached = reusable_model_details(
+                previous_by_name.get(name.as_str()).copied(),
+                previous_version,
+                &version,
+                &name,
+                digest.as_deref(),
+            );
+            let show = if cached.is_some() {
+                Map::new()
+            } else {
+                match self
+                    .request_json(
+                        "/api/show",
+                        Some(json!({ "model": name, "verbose": false })),
+                    )
+                    .await
+                {
+                    Ok(value) => value,
+                    Err(error) if error.code == "http_404" => continue,
+                    Err(_) => Map::new(),
+                }
             };
             let details = show
                 .get("details")
@@ -90,33 +123,41 @@ impl OllamaClient {
                 .and_then(Value::as_object)
                 .cloned()
                 .unwrap_or_default();
-            let capabilities = show
-                .get("capabilities")
-                .and_then(Value::as_array)
-                .map(|values| {
-                    values
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_string)
-                        .collect()
-                })
-                .unwrap_or_default();
+            let capabilities = cached.map_or_else(
+                || {
+                    show.get("capabilities")
+                        .and_then(Value::as_array)
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_string)
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                },
+                |model| model.capabilities.clone(),
+            );
 
             models.push(OllamaModelDetails {
                 name,
-                digest: string_value(tag.get("digest")),
-                size_bytes: positive_u64(tag.get("size")),
-                family: string_value(details.get("family").or_else(|| tag_details.get("family"))),
+                digest,
+                size_bytes: positive_u64(tag.get("size"))
+                    .or_else(|| cached.and_then(|model| model.size_bytes)),
+                family: string_value(details.get("family").or_else(|| tag_details.get("family")))
+                    .or_else(|| cached.and_then(|model| model.family.clone())),
                 parameter_size: string_value(
                     details
                         .get("parameter_size")
                         .or_else(|| tag_details.get("parameter_size")),
-                ),
+                )
+                .or_else(|| cached.and_then(|model| model.parameter_size.clone())),
                 quantization: string_value(
                     details
                         .get("quantization_level")
                         .or_else(|| tag_details.get("quantization_level")),
-                ),
+                )
+                .or_else(|| cached.and_then(|model| model.quantization.clone())),
                 capabilities,
             });
         }
@@ -128,15 +169,11 @@ impl OllamaClient {
         let started_at = Utc::now().to_rfc3339();
         let started = Instant::now();
         let target = self.target_url("/api/generate")?;
-        let resolved = resolve_target(&target, self.settings.allow_private_networks).await?;
-        let client = build_client(
-            &target,
-            resolved,
-            self.settings.connect_timeout_ms,
-            self.settings.benchmark_timeout_ms,
-        )?;
-        let response = client
+        let session = self.session().await?;
+        let response = session
+            .client
             .post(target)
+            .timeout(Duration::from_millis(self.settings.benchmark_timeout_ms))
             .json(&json!({
                 "model": model,
                 "prompt": self.settings.benchmark_prompt,
@@ -150,7 +187,7 @@ impl OllamaClient {
             .send()
             .await
             .map_err(normalize_reqwest_error)?;
-        let response = verify_response(response, resolved)?;
+        let response = verify_response(response, session.resolved)?;
 
         let mut stream = response.bytes_stream();
         let mut pending = String::new();
@@ -268,13 +305,13 @@ impl OllamaClient {
         timeout_ms: u64,
     ) -> ClientResult<Map<String, Value>> {
         let target = self.target_url(path)?;
+        let session = self.session().await?;
         let bytes = request_bytes(
+            session,
             target,
             body,
-            self.settings.connect_timeout_ms,
             timeout_ms,
             self.settings.max_response_bytes,
-            self.settings.allow_private_networks,
         )
         .await?;
         serde_json::from_slice::<Value>(&bytes)
@@ -290,6 +327,36 @@ impl OllamaClient {
             .and_then(|url| url.join(path.trim_start_matches('/')))
             .map_err(|_| OllamaClientError::new("invalid_endpoint", "Invalid Ollama endpoint"))
     }
+
+    async fn session(&self) -> ClientResult<&ClientSession> {
+        self.session
+            .get_or_try_init(|| async {
+                let target = self.target_url("/")?;
+                let resolved =
+                    resolve_target(&target, self.settings.allow_private_networks).await?;
+                let client = build_client(&target, resolved, self.settings.connect_timeout_ms)?;
+                Ok(ClientSession { client, resolved })
+            })
+            .await
+    }
+}
+
+fn reusable_model_details<'a>(
+    previous_model: Option<&'a ServerModel>,
+    previous_version: Option<&str>,
+    current_version: &str,
+    model_name: &str,
+    digest: Option<&str>,
+) -> Option<&'a ServerModel> {
+    let digest = digest?;
+    if previous_version != Some(current_version) {
+        return None;
+    }
+    previous_model.filter(|model| {
+        model.name == model_name
+            && model.digest.as_deref() == Some(digest)
+            && !model.capabilities.is_empty()
+    })
 }
 
 fn validate_model_name(model: &str) -> ClientResult<()> {
@@ -303,28 +370,28 @@ fn validate_model_name(model: &str) -> ClientResult<()> {
 }
 
 async fn request_bytes(
+    session: &ClientSession,
     target: Url,
     body: Option<Value>,
-    connect_timeout_ms: u64,
     timeout_ms: u64,
     max_bytes: usize,
-    allow_private_networks: bool,
 ) -> ClientResult<Vec<u8>> {
-    let resolved = resolve_target(&target, allow_private_networks).await?;
-    let client = build_client(&target, resolved, connect_timeout_ms, timeout_ms)?;
-    let mut request = client.request(
-        if body.is_some() {
-            Method::POST
-        } else {
-            Method::GET
-        },
-        target,
-    );
+    let mut request = session
+        .client
+        .request(
+            if body.is_some() {
+                Method::POST
+            } else {
+                Method::GET
+            },
+            target,
+        )
+        .timeout(Duration::from_millis(timeout_ms));
     if let Some(payload) = body {
         request = request.json(&payload);
     }
     let response = request.send().await.map_err(normalize_reqwest_error)?;
-    let response = verify_response(response, resolved)?;
+    let response = verify_response(response, session.resolved)?;
     let mut bytes = Vec::new();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
@@ -344,12 +411,10 @@ fn build_client(
     target: &Url,
     resolved: SocketAddr,
     connect_timeout_ms: u64,
-    timeout_ms: u64,
 ) -> ClientResult<Client> {
     let mut builder = Client::builder()
         .redirect(Policy::none())
         .connect_timeout(Duration::from_millis(connect_timeout_ms))
-        .timeout(Duration::from_millis(timeout_ms))
         .user_agent("OllamaProfiler/0.1");
     if let Some(host) = target.host_str()
         && matches!(target.host(), Some(Host::Domain(_)))
@@ -551,5 +616,54 @@ mod tests {
         let private = "192.168.1.2".parse().unwrap();
         assert!(is_address_allowed(private, true));
         assert!(!is_address_allowed(private, false));
+    }
+
+    #[test]
+    fn reuses_cached_model_details_only_for_unchanged_inventory() {
+        let cached = ServerModel {
+            id: "model-1".into(),
+            name: "qwen3:8b".into(),
+            digest: Some("sha256:unchanged".into()),
+            family: Some("qwen3".into()),
+            parameter_size: Some("8B".into()),
+            quantization: Some("Q4_K_M".into()),
+            size_bytes: Some(4_000_000_000),
+            capabilities: vec!["completion".into()],
+            installed: true,
+            first_seen_at: "2026-08-01T00:00:00Z".into(),
+            last_seen_at: "2026-08-01T00:00:00Z".into(),
+            benchmarks: Vec::new(),
+        };
+
+        assert!(
+            reusable_model_details(
+                Some(&cached),
+                Some("0.11.0"),
+                "0.11.0",
+                "qwen3:8b",
+                Some("sha256:unchanged"),
+            )
+            .is_some()
+        );
+        assert!(
+            reusable_model_details(
+                Some(&cached),
+                Some("0.10.0"),
+                "0.11.0",
+                "qwen3:8b",
+                Some("sha256:unchanged"),
+            )
+            .is_none()
+        );
+        assert!(
+            reusable_model_details(
+                Some(&cached),
+                Some("0.11.0"),
+                "0.11.0",
+                "qwen3:8b",
+                Some("sha256:changed"),
+            )
+            .is_none()
+        );
     }
 }
