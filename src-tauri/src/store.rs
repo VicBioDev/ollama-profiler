@@ -43,14 +43,30 @@ impl ProfilerStore {
         self.snapshot.clone()
     }
 
+    pub fn read<T>(&self, reader: impl FnOnce(&ProfilerSnapshot) -> T) -> T {
+        reader(&self.snapshot)
+    }
+
     pub fn mutate<T>(
+        &mut self,
+        mutator: impl FnOnce(&mut ProfilerSnapshot) -> AppResult<T>,
+    ) -> AppResult<T> {
+        let result = self.mutate_in_memory(mutator)?;
+        self.persist()?;
+        Ok(result)
+    }
+
+    pub fn mutate_in_memory<T>(
         &mut self,
         mutator: impl FnOnce(&mut ProfilerSnapshot) -> AppResult<T>,
     ) -> AppResult<T> {
         let result = mutator(&mut self.snapshot)?;
         self.snapshot.updated_at = Utc::now().to_rfc3339();
-        self.save()?;
         Ok(result)
+    }
+
+    pub fn persist(&self) -> AppResult<()> {
+        self.save()
     }
 
     pub fn cancel_running_jobs(&mut self) -> AppResult<()> {
@@ -89,6 +105,9 @@ impl ProfilerStore {
 
         let cutoff = Utc::now() - Duration::days(90);
         for server in &mut self.snapshot.servers {
+            if server.status == crate::types::ServerStatus::Checking {
+                server.status = crate::types::ServerStatus::Unknown;
+            }
             if server.discovery_sources.is_empty() {
                 server.discovery_sources.push(server.source.clone());
             }
@@ -209,6 +228,35 @@ mod tests {
         );
         assert_eq!(loaded.settings.scan_concurrency, 8);
         assert_eq!(loaded.settings.benchmark_concurrency, 8);
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn in_memory_mutations_wait_for_an_explicit_checkpoint() {
+        let directory =
+            std::env::temp_dir().join(format!("ollama-profiler-store-{}", Uuid::new_v4()));
+        let path = directory.join("profiler-data.json");
+        let mut store = ProfilerStore::load(path.clone()).unwrap();
+
+        store
+            .mutate_in_memory(|snapshot| {
+                snapshot.settings.scan_concurrency = 32;
+                Ok(())
+            })
+            .unwrap();
+
+        let on_disk: PersistedDocument = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(
+            store.read(|snapshot| snapshot.settings.scan_concurrency),
+            32
+        );
+        assert_eq!(on_disk.snapshot.settings.scan_concurrency, 8);
+
+        store.persist().unwrap();
+        let checkpointed: PersistedDocument =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(checkpointed.snapshot.settings.scan_concurrency, 32);
 
         fs::remove_dir_all(directory).unwrap();
     }

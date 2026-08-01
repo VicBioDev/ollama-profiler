@@ -322,6 +322,16 @@ pub struct ProfilerSnapshot {
     pub updated_at: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfilerPatch {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub servers: Vec<ServerRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jobs: Vec<ProfilerJob>,
+    pub updated_at: String,
+}
+
 impl ProfilerSnapshot {
     pub fn empty(now: String) -> Self {
         Self {

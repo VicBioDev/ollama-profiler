@@ -38,6 +38,7 @@ struct EngineInner {
     import_sessions: Mutex<HashMap<String, ImportPreview>>,
     active_jobs: Mutex<HashMap<JobKind, String>>,
     profile_after_scan: DeferredProfileRequests,
+    pending_scan_updates: PendingScanUpdates,
     server_locks: AsyncMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
     last_scheduled_scan: Mutex<Option<Instant>>,
     settings_changed: watch::Sender<u64>,
@@ -92,7 +93,43 @@ impl DeferredProfileRequests {
     }
 }
 
+#[derive(Default)]
+struct PendingScanUpdates {
+    by_job: Mutex<HashMap<String, HashMap<String, ServerRecord>>>,
+}
+
+impl PendingScanUpdates {
+    fn insert(&self, scan_job_id: &str, server: ServerRecord) -> AppResult<()> {
+        self.by_job
+            .lock()
+            .map_err(|_| AppError::message("Pending scan updates are unavailable"))?
+            .entry(scan_job_id.to_string())
+            .or_default()
+            .insert(server.id.clone(), server);
+        Ok(())
+    }
+
+    fn take(&self, scan_job_id: &str) -> AppResult<Vec<ServerRecord>> {
+        Ok(self
+            .by_job
+            .lock()
+            .map_err(|_| AppError::message("Pending scan updates are unavailable"))?
+            .remove(scan_job_id)
+            .unwrap_or_default()
+            .into_values()
+            .collect())
+    }
+
+    fn clear(&self) {
+        if let Ok(mut updates) = self.by_job.lock() {
+            updates.clear();
+        }
+    }
+}
+
 const MAX_JOB_PROGRESS_SAMPLES: usize = 11;
+const SCAN_PATCH_BATCH_SIZE: usize = 32;
+const SCAN_CHECKPOINT_BATCH_SIZE: usize = 256;
 
 impl ProfilerEngine {
     pub fn new(app: AppHandle, store: ProfilerStore) -> Self {
@@ -104,6 +141,7 @@ impl ProfilerEngine {
                 import_sessions: Mutex::new(HashMap::new()),
                 active_jobs: Mutex::new(HashMap::new()),
                 profile_after_scan: DeferredProfileRequests::default(),
+                pending_scan_updates: PendingScanUpdates::default(),
                 server_locks: AsyncMutex::new(HashMap::new()),
                 last_scheduled_scan: Mutex::new(None),
                 settings_changed,
@@ -464,6 +502,7 @@ impl ProfilerEngine {
             active.clear();
         }
         self.inner.profile_after_scan.clear();
+        self.inner.pending_scan_updates.clear();
     }
 
     async fn run_localhost_discovery(&self, job_id: String) {
@@ -698,8 +737,7 @@ impl ProfilerEngine {
             server_ids,
             self.inner.settings_changed.subscribe(),
             || {
-                self.get_snapshot()
-                    .map(|snapshot| snapshot.settings.scan_concurrency)
+                self.read_snapshot(|snapshot| snapshot.settings.scan_concurrency)
                     .unwrap_or(1)
             },
             |server_id| {
@@ -712,16 +750,16 @@ impl ProfilerEngine {
                     }
                     let lock = engine.server_lock(&server_id).await;
                     let _guard = lock.lock().await;
-                    if engine.scan_one_server(&server_id).await
+                    if engine.scan_one_server(&job_id, &server_id).await
                         && let Ok(mut values) = successful.lock()
                     {
                         values.push(server_id.clone());
                     }
-                    let _ = engine.increment_job(&job_id);
                 }
             },
         )
         .await;
+        let _ = self.inner.pending_scan_updates.take(&job_id);
         let _ = self.finish_job(&job_id, JobStatus::Completed, None, None);
         let successful = successful
             .lock()
@@ -820,40 +858,43 @@ impl ProfilerEngine {
         self.inner.profile_after_scan.take(scan_job_id)
     }
 
-    async fn scan_one_server(&self, server_id: &str) -> bool {
-        let snapshot = match self.get_snapshot() {
-            Ok(snapshot) => snapshot,
-            Err(_) => return false,
+    async fn scan_one_server(&self, job_id: &str, server_id: &str) -> bool {
+        let target = match self.read_snapshot(|snapshot| {
+            snapshot
+                .servers
+                .iter()
+                .find(|server| server.id == server_id)
+                .cloned()
+                .map(|server| (server, snapshot.settings.clone()))
+        }) {
+            Ok(Some(target)) => target,
+            _ => return false,
         };
-        let Some(server) = snapshot
-            .servers
-            .iter()
-            .find(|server| server.id == server_id)
-            .cloned()
-        else {
-            return false;
-        };
-        let _ = self.mutate(|snapshot| {
+        let (server, settings) = target;
+        let checking_at = Utc::now().to_rfc3339();
+        if let Ok(checking) = self.mutate_in_memory(|snapshot| {
             let current = require_server_mut(snapshot, server_id)?;
             current.status = ServerStatus::Checking;
-            current.last_checked_at = Some(Utc::now().to_rfc3339());
-            Ok(())
-        });
-        self.broadcast();
+            current.last_checked_at = Some(checking_at.clone());
+            Ok(current.clone())
+        }) {
+            let _ = self.inner.pending_scan_updates.insert(job_id, checking);
+        }
 
-        match OllamaClient::new(server.endpoint, snapshot.settings)
+        let result = OllamaClient::new(server.endpoint, settings)
             .inventory()
-            .await
-        {
-            Ok(inventory) => {
-                let now = Utc::now().to_rfc3339();
-                let result = self.mutate(|snapshot| {
-                    let current = require_server_mut(snapshot, server_id)?;
+            .await;
+        let completed_at = Utc::now().to_rfc3339();
+        let successful = result.is_ok();
+        let completion = self.mutate_in_memory(|snapshot| {
+            let current = require_server_mut(snapshot, server_id)?;
+            match result {
+                Ok(inventory) => {
                     current.status = ServerStatus::Online;
                     current.ollama_version = Some(inventory.version);
                     current.failure_count = 0;
-                    current.last_online_at = Some(now.clone());
-                    current.last_checked_at = Some(now.clone());
+                    current.last_online_at = Some(completed_at.clone());
+                    current.last_checked_at = Some(completed_at.clone());
                     current.last_error_code = None;
                     current.last_error_message = None;
                     let returned: HashSet<String> = inventory
@@ -877,7 +918,7 @@ impl ProfilerEngine {
                             existing.quantization = discovered.quantization;
                             existing.capabilities = discovered.capabilities;
                             existing.installed = true;
-                            existing.last_seen_at = now.clone();
+                            existing.last_seen_at = completed_at.clone();
                         } else {
                             current.models.push(ServerModel {
                                 id: Uuid::new_v4().to_string(),
@@ -889,35 +930,49 @@ impl ProfilerEngine {
                                 size_bytes: discovered.size_bytes,
                                 capabilities: discovered.capabilities,
                                 installed: true,
-                                first_seen_at: now.clone(),
-                                last_seen_at: now.clone(),
+                                first_seen_at: completed_at.clone(),
+                                last_seen_at: completed_at.clone(),
                                 benchmarks: Vec::new(),
                             });
                         }
                     }
-                    Ok(())
-                });
-                self.broadcast();
-                result.is_ok()
-            }
-            Err(error) => {
-                let _ = self.mutate(|snapshot| {
-                    let current = require_server_mut(snapshot, server_id)?;
+                }
+                Err(error) => {
                     current.failure_count += 1;
                     current.status = if current.failure_count >= 3 {
                         ServerStatus::Offline
                     } else {
                         ServerStatus::Unknown
                     };
-                    current.last_checked_at = Some(Utc::now().to_rfc3339());
+                    current.last_checked_at = Some(completed_at.clone());
                     current.last_error_code = Some(error.code);
                     current.last_error_message = Some(error.message);
-                    Ok(())
-                });
-                self.broadcast();
-                false
+                }
             }
+            let server = current.clone();
+            let job = snapshot
+                .jobs
+                .iter_mut()
+                .find(|job| job.id == job_id)
+                .ok_or_else(|| AppError::message("Scan job not found"))?;
+            if matches!(job.status, JobStatus::Queued | JobStatus::Running) {
+                let completed = (job.completed + 1).min(job.total);
+                record_job_progress(job, completed, completed_at.clone());
+            }
+            Ok((server, job.clone()))
+        });
+
+        let Ok((server, job)) = completion else {
+            return false;
+        };
+        let _ = self.inner.pending_scan_updates.insert(job_id, server);
+        if should_emit_scan_patch(job.completed, job.total) {
+            self.flush_scan_updates(job_id, Some(job.clone()), completed_at.clone());
         }
+        if should_persist_scan_checkpoint(job.completed, job.total) {
+            let _ = self.persist();
+        }
+        successful
     }
 
     fn queue_benchmark(
@@ -1273,6 +1328,38 @@ impl ProfilerEngine {
         self.store()?.mutate(mutator)
     }
 
+    fn read_snapshot<T>(&self, reader: impl FnOnce(&ProfilerSnapshot) -> T) -> AppResult<T> {
+        Ok(self.store()?.read(reader))
+    }
+
+    fn mutate_in_memory<T>(
+        &self,
+        mutator: impl FnOnce(&mut ProfilerSnapshot) -> AppResult<T>,
+    ) -> AppResult<T> {
+        self.store()?.mutate_in_memory(mutator)
+    }
+
+    fn persist(&self) -> AppResult<()> {
+        self.store()?.persist()
+    }
+
+    fn flush_scan_updates(&self, job_id: &str, job: Option<ProfilerJob>, updated_at: String) {
+        let Ok(servers) = self.inner.pending_scan_updates.take(job_id) else {
+            return;
+        };
+        if servers.is_empty() && job.is_none() {
+            return;
+        }
+        let _ = self.inner.app.emit(
+            "profiler:patch",
+            ProfilerPatch {
+                servers,
+                jobs: job.into_iter().collect(),
+                updated_at,
+            },
+        );
+    }
+
     fn broadcast(&self) {
         if let Ok(snapshot) = self.get_snapshot() {
             let _ = self.inner.app.emit("profiler:snapshot", snapshot);
@@ -1315,6 +1402,14 @@ fn record_job_progress(job: &mut ProfilerJob, completed: usize, recorded_at: Str
     if overflow > 0 {
         job.progress_samples.drain(..overflow);
     }
+}
+
+fn should_emit_scan_patch(completed: usize, total: usize) -> bool {
+    completed > 0 && (completed == total || completed % SCAN_PATCH_BATCH_SIZE == 0)
+}
+
+fn should_persist_scan_checkpoint(completed: usize, total: usize) -> bool {
+    completed > 0 && completed < total && completed % SCAN_CHECKPOINT_BATCH_SIZE == 0
 }
 
 fn latest_incomplete_benchmark(snapshot: &ProfilerSnapshot) -> Option<&ProfilerJob> {
@@ -1614,6 +1709,36 @@ mod tests {
             options.label.as_deref(),
             Some("Check all servers on launch")
         );
+    }
+
+    #[test]
+    fn scan_updates_are_batched_and_the_final_partial_batch_is_emitted() {
+        assert!(!should_emit_scan_patch(1, 70));
+        assert!(should_emit_scan_patch(32, 70));
+        assert!(should_emit_scan_patch(64, 70));
+        assert!(should_emit_scan_patch(70, 70));
+    }
+
+    #[test]
+    fn scan_checkpoints_skip_the_final_full_persist() {
+        assert!(!should_persist_scan_checkpoint(32, 600));
+        assert!(should_persist_scan_checkpoint(256, 600));
+        assert!(should_persist_scan_checkpoint(512, 600));
+        assert!(!should_persist_scan_checkpoint(600, 600));
+    }
+
+    #[test]
+    fn pending_scan_updates_keep_only_the_latest_server_state() {
+        let updates = PendingScanUpdates::default();
+        let mut server = benchmark_server("server-1", ServerStatus::Checking, false);
+        updates.insert("scan-1", server.clone()).unwrap();
+        server.status = ServerStatus::Online;
+        updates.insert("scan-1", server).unwrap();
+
+        let pending = updates.take("scan-1").unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].status, ServerStatus::Online);
+        assert!(updates.take("scan-1").unwrap().is_empty());
     }
 
     #[test]

@@ -17,9 +17,9 @@ beforeEach(() => {
   document.body.append(container)
   root = createRoot(container)
   writeText.mockResolvedValue(undefined)
-  Object.defineProperty(navigator, 'clipboard', {
+  Object.defineProperty(window, 'ollamaProfiler', {
     configurable: true,
-    value: { writeText }
+    value: { writeClipboardText: writeText }
   })
 })
 
@@ -64,6 +64,29 @@ describe('server address copy actions', () => {
 
     expect(writeText).toHaveBeenCalledWith('http://127.0.0.1:11434')
     expect(copyButton.textContent).toBe('Copied')
+  })
+
+  it('shows a failure state when the native clipboard rejects the write', async () => {
+    writeText.mockRejectedValueOnce(new Error('clipboard unavailable'))
+    act(() => {
+      root.render(
+        <ServerDetailPage
+          onApprovalChange={() => undefined}
+          onBack={() => undefined}
+          onRemove={() => undefined}
+          server={server()}
+        />
+      )
+    })
+
+    const copyButton = findCopyButton()
+    await act(async () => copyButton.click())
+
+    expect(copyButton.getAttribute('aria-label')).toBe(
+      'Could not copy server address: http://127.0.0.1:11434'
+    )
+    expect(copyButton.textContent).toBe('Copy failed')
+    expect(copyButton.classList.contains('failed')).toBe(true)
   })
 })
 

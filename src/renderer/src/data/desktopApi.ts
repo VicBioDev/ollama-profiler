@@ -22,6 +22,7 @@ export function createDesktopApi(): DesktopApi {
     platform: currentPlatform === 'macos' ? 'darwin' : currentPlatform,
     getSnapshot: () => invoke<ProfilerSnapshot>('get_snapshot'),
     subscribe: (listener) => subscribe('profiler:snapshot', listener),
+    subscribeToPatch: (listener) => subscribe('profiler:patch', listener),
     subscribeToNavigation: (listener) =>
       subscribe<DesktopNavigationTarget>('profiler:navigate', listener),
     selectImportFile: async () => {
@@ -69,7 +70,8 @@ export function createDesktopApi(): DesktopApi {
         : null
     },
     chatModels: (request: ChatRequest) =>
-      invoke<ChatResponse>('chat_models', { request })
+      invoke<ChatResponse>('chat_models', { request }),
+    writeClipboardText: (text) => invoke<void>('write_clipboard_text', { text })
   }
 }
 

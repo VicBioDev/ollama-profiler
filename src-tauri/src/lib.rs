@@ -13,6 +13,7 @@ use error::AppError;
 use store::{ProfilerStore, migrate_legacy_data};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use types::{
     AppSettings, AppSettingsPatch, ChatRequest, ChatResponse, ImportCommitOptions,
     ImportCommitResult, ImportPreview, ProfilerSnapshot, ServerExportOptions, ServerExportResult,
@@ -23,6 +24,13 @@ type CommandResult<T> = Result<T, String>;
 #[tauri::command]
 fn get_snapshot(engine: State<'_, ProfilerEngine>) -> CommandResult<ProfilerSnapshot> {
     engine.get_snapshot().map_err(command_error)
+}
+
+#[tauri::command]
+fn write_clipboard_text(app: tauri::AppHandle, text: String) -> CommandResult<()> {
+    app.clipboard()
+        .write_text(text)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -217,6 +225,7 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
@@ -234,6 +243,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            write_clipboard_text,
             preview_file,
             preview_text,
             commit_import,

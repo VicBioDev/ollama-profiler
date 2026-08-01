@@ -1,15 +1,15 @@
 import { useEffect, useRef } from 'react'
 import type { ProfilerSnapshot } from '@shared/types'
 import {
-  confirmBenchmarkContinuation,
+  decideBenchmarkContinuation,
   latestIncompleteBenchmark
 } from '@shared/job-utils'
 
-type BenchmarkConfirmation = Parameters<typeof confirmBenchmarkContinuation>[1]
+type BenchmarkDecisionRequest = Parameters<typeof decideBenchmarkContinuation>[1]
 
 export function useBenchmarkContinuationOnLaunch(
   snapshot: ProfilerSnapshot | undefined,
-  confirm: BenchmarkConfirmation,
+  requestDecision: BenchmarkDecisionRequest,
   profileAllServers: (resumeIncomplete?: boolean) => Promise<void>
 ): void {
   const checked = useRef(false)
@@ -27,8 +27,12 @@ export function useBenchmarkContinuationOnLaunch(
       return
     }
 
-    void confirmBenchmarkContinuation(snapshot.jobs, confirm).then((resume) =>
-      profileAllServersRef.current(resume)
+    void decideBenchmarkContinuation(snapshot.jobs, requestDecision).then(
+      (decision) => {
+        if (decision !== 'cancel') {
+          void profileAllServersRef.current(decision === 'continue')
+        }
+      }
     )
-  }, [confirm, snapshot])
+  }, [requestDecision, snapshot])
 }

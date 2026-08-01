@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BENCHMARK_CONTINUATION_DIALOG,
   benchmarkContinuationPrompt,
-  confirmBenchmarkContinuation,
+  decideBenchmarkContinuation,
   latestIncompleteBenchmark
 } from '@shared/job-utils.js'
 import type { ProfilerJob } from '@shared/types.js'
@@ -35,31 +34,30 @@ describe('benchmark continuation', () => {
     ).toBeUndefined()
   })
 
-  it('labels the two choices as continue and start over', () => {
+  it('describes the unfinished benchmark before requesting a decision', () => {
     const prompt = benchmarkContinuationPrompt(job({}))
 
     expect(prompt).toContain('stopped after 2 of 5 servers')
     expect(prompt).toContain('Continue where it left off?')
-    expect(prompt).not.toContain('Cancel')
-    expect(BENCHMARK_CONTINUATION_DIALOG.okLabel).toBe('Continue')
-    expect(BENCHMARK_CONTINUATION_DIALOG.cancelLabel).toBe('Start over')
   })
 
-  it('asks only for an incomplete latest run and returns the user choice', async () => {
-    const prompts: string[] = []
-    const options: unknown[] = []
-    const confirm = async (message: string, dialogOptions: unknown): Promise<boolean> => {
-      prompts.push(message)
-      options.push(dialogOptions)
-      return true
+  it('asks only for an incomplete latest run and returns the decision', async () => {
+    const requested: ProfilerJob[] = []
+    const requestDecision = async (incomplete: ProfilerJob) => {
+      requested.push(incomplete)
+      return 'cancel' as const
     }
 
-    await expect(confirmBenchmarkContinuation([job({})], confirm)).resolves.toBe(true)
-    expect(prompts).toHaveLength(1)
-    expect(options).toEqual([BENCHMARK_CONTINUATION_DIALOG])
     await expect(
-      confirmBenchmarkContinuation([job({ status: 'completed', completed: 5 })], confirm)
-    ).resolves.toBe(false)
-    expect(prompts).toHaveLength(1)
+      decideBenchmarkContinuation([job({})], requestDecision)
+    ).resolves.toBe('cancel')
+    expect(requested).toHaveLength(1)
+    await expect(
+      decideBenchmarkContinuation(
+        [job({ status: 'completed', completed: 5 })],
+        requestDecision
+      )
+    ).resolves.toBe('start-over')
+    expect(requested).toHaveLength(1)
   })
 })

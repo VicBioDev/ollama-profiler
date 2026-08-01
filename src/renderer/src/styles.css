@@ -381,6 +381,15 @@ code,
   line-height: 1.6;
 }
 
+.benchmark-continuation-dialog {
+  width: min(500px, calc(100vw - 48px));
+}
+
+.update-dialog > .benchmark-continuation-note {
+  margin-top: 14px;
+  color: var(--text-soft);
+}
+
 .update-release-notes {
   margin-top: 20px;
   padding: 16px;
@@ -881,6 +890,11 @@ tbody tr.selected-row {
 .copy-address-button.copied {
   color: var(--green);
   border-color: rgba(105, 232, 174, 0.3);
+}
+
+.copy-address-button.failed {
+  color: var(--red);
+  border-color: rgba(255, 111, 111, 0.38);
 }
 
 .copy-address-button.labeled {

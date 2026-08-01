@@ -1,6 +1,6 @@
 import { AlertCircle, X } from 'lucide-react'
-import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BenchmarkContinuationDialog } from './components/BenchmarkContinuationDialog'
 import { Sidebar, type PageId } from './components/Sidebar'
 import { TopBar, type TopBarAction } from './components/TopBar'
 import { useProfiler } from './hooks/useProfiler'
@@ -20,7 +20,11 @@ import {
 } from './pages/ChatPage'
 import { isLocalDiscoveryServer } from './hooks/useLocalDiscovery'
 import { useBenchmarkContinuationOnLaunch } from './hooks/useBenchmarkContinuationOnLaunch'
-import { confirmBenchmarkContinuation } from '@shared/job-utils'
+import {
+  decideBenchmarkContinuation,
+  type BenchmarkContinuationDecision
+} from '@shared/job-utils'
+import type { ProfilerJob } from '@shared/types'
 
 interface AppProps {}
 
@@ -34,6 +38,28 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
   )
   const [serversSearchState, setServersSearchState] = useState(
     createServersSearchState
+  )
+  const [benchmarkContinuationJob, setBenchmarkContinuationJob] =
+    useState<ProfilerJob>()
+  const benchmarkDecisionResolver = useRef<
+    ((decision: BenchmarkContinuationDecision) => void) | undefined
+  >(undefined)
+  const requestBenchmarkDecision = useCallback(
+    (job: ProfilerJob): Promise<BenchmarkContinuationDecision> =>
+      new Promise((resolve) => {
+        benchmarkDecisionResolver.current = resolve
+        setBenchmarkContinuationJob(job)
+      }),
+    []
+  )
+  const resolveBenchmarkDecision = useCallback(
+    (decision: BenchmarkContinuationDecision): void => {
+      const resolve = benchmarkDecisionResolver.current
+      benchmarkDecisionResolver.current = undefined
+      setBenchmarkContinuationJob(undefined)
+      resolve?.(decision)
+    },
+    []
   )
   const selectedServer = useMemo(
     () => snapshot?.servers.find((server) => server.id === selectedServerId),
@@ -70,7 +96,7 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
   )
   useBenchmarkContinuationOnLaunch(
     snapshot,
-    confirmDialog,
+    requestBenchmarkDecision,
     actions.profileAllServers
   )
 
@@ -89,9 +115,14 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
       : {
           label: 'Scan & benchmark all',
           onClick: () => {
-            void confirmBenchmarkContinuation(snapshot.jobs, confirmDialog).then((resume) =>
-              actions.profileAllServers(resume)
-            )
+            void decideBenchmarkContinuation(
+              snapshot.jobs,
+              requestBenchmarkDecision
+            ).then((decision) => {
+              if (decision !== 'cancel') {
+                void actions.profileAllServers(decision === 'continue')
+              }
+            })
           }
         }
 
@@ -194,6 +225,12 @@ export default function App(_props: Readonly<AppProps>): React.JSX.Element {
           )}
         </main>
       </div>
+      {benchmarkContinuationJob ? (
+        <BenchmarkContinuationDialog
+          job={benchmarkContinuationJob}
+          onDecision={resolveBenchmarkDecision}
+        />
+      ) : null}
     </div>
   )
 }

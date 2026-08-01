@@ -9,6 +9,7 @@ import type {
   ServerExportOptions,
   ServerExportResult
 } from '@shared/types'
+import { applyProfilerPatch } from '@shared/snapshot'
 
 interface ProfilerActions {
   selectImportFile: () => Promise<ImportPreview | null>
@@ -42,7 +43,14 @@ export function useProfiler(): UseProfilerResult {
 
   useEffect(() => {
     void window.ollamaProfiler.getSnapshot().then(setSnapshot).catch(captureError)
-    return window.ollamaProfiler.subscribe(setSnapshot)
+    const unsubscribeSnapshot = window.ollamaProfiler.subscribe(setSnapshot)
+    const unsubscribePatch = window.ollamaProfiler.subscribeToPatch((patch) => {
+      setSnapshot((current) => (current ? applyProfilerPatch(current, patch) : current))
+    })
+    return () => {
+      unsubscribePatch()
+      unsubscribeSnapshot()
+    }
   }, [])
 
   const run = useCallback(async <T,>(operation: () => Promise<T>): Promise<T> => {
