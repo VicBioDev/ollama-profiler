@@ -2412,6 +2412,32 @@ textarea:focus,
   grid-column: 1 / -1;
 }
 
+.resource-preset {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 13px;
+  background: rgba(105, 232, 174, 0.04);
+  border: 1px solid rgba(105, 232, 174, 0.12);
+  border-radius: var(--radius-sm);
+}
+
+.resource-preset div {
+  display: grid;
+  gap: 3px;
+}
+
+.resource-preset strong {
+  font-size: 11px;
+}
+
+.resource-preset small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .form-grid label {
   display: grid;
   gap: 6px;
@@ -2439,6 +2465,21 @@ textarea:focus,
   padding: 0;
   margin: 0;
   border: 0;
+}
+
+.concurrency-warning {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 9px;
+  color: var(--yellow) !important;
+  font-size: 9px !important;
+  line-height: 1.4;
+}
+
+.concurrency-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
 }
 
 .concurrency-picker legend {

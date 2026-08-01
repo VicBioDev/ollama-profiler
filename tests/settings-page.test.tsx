@@ -137,6 +137,10 @@ describe('benchmark controls', () => {
       benchmark64.click()
       setTextAreaValue(prompt, 'Explain why deterministic benchmarks matter.')
     })
+    const warnings = [...container.querySelectorAll('[role="alert"]')]
+    expect(warnings).toHaveLength(2)
+    expect(warnings[0]?.textContent).toContain('extremely heavy pressure')
+    expect(warnings[1]?.textContent).toContain('heavy pressure')
     await act(async () => {
       save.click()
     })
@@ -146,6 +150,51 @@ describe('benchmark controls', () => {
         scanConcurrency: 128,
         benchmarkConcurrency: 64,
         benchmarkPrompt: 'Explain why deterministic benchmarks matter.'
+      })
+    )
+  })
+
+  it('applies the resource-saving preset before saving', async () => {
+    const onSaveSettings = vi.fn(async () => undefined)
+    await act(async () => {
+      root.render(
+        <SettingsPage
+          busy={false}
+          onSaveSettings={onSaveSettings}
+          settings={{
+            ...DEFAULT_SETTINGS,
+            scanConcurrency: 128,
+            benchmarkConcurrency: 128,
+            benchmarkNumPredict: 64
+          }}
+        />
+      )
+    })
+    const preset = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      ({ textContent }) => textContent?.includes('Use preset')
+    )
+    const save = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+      ({ textContent }) => textContent?.includes('Save settings')
+    )
+    if (!preset || !save) throw new Error('Expected resource saver controls')
+
+    await act(async () => preset.click())
+    expect(container.querySelector<HTMLInputElement>(
+      'input[name="scanConcurrency"][value="32"]'
+    )?.checked).toBe(true)
+    expect(container.querySelector<HTMLInputElement>(
+      'input[name="benchmarkConcurrency"][value="8"]'
+    )?.checked).toBe(true)
+    expect(container.querySelector<HTMLInputElement>('input[type="number"][max="512"]')?.value)
+      .toBe('32')
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0)
+
+    await act(async () => save.click())
+    expect(onSaveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanConcurrency: 32,
+        benchmarkConcurrency: 8,
+        benchmarkNumPredict: 32
       })
     )
   })

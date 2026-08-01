@@ -5,6 +5,7 @@ import {
   Gauge,
   Server
 } from 'lucide-react'
+import { useMemo } from 'react'
 import type { ProfilerSnapshot } from '@shared/types'
 import { APP_COPY } from '../data/uiCopy'
 import { bestServerSpeed, formatNumber, formatRelative } from '../utils/format'
@@ -24,28 +25,33 @@ export function OverviewPage({
   onNavigateToImport,
   onSelectServer
 }: Readonly<OverviewPageProps>): React.JSX.Element {
-  const online = snapshot.servers.filter((server) => server.status === 'online').length
-  const uniqueModels = new Set(
-    snapshot.servers.flatMap((server) =>
-      server.models.filter((model) => model.installed).map((model) => model.name)
-    )
-  ).size
-  const results = snapshot.servers.flatMap((server) =>
-    server.models.flatMap((model) => model.benchmarks)
-  )
-  const successes = results.filter((result) => result.status === 'success')
-  const successRate = results.length === 0 ? 0 : (successes.length / results.length) * 100
-  const fastest = Math.max(
-    0,
-    ...snapshot.servers.map((server) => bestServerSpeed(server) ?? 0)
-  )
-  const recentServers = [...snapshot.servers]
-    .sort(
-      (left, right) =>
-        Date.parse(right.lastOnlineAt ?? right.lastDiscoveredAt) -
-        Date.parse(left.lastOnlineAt ?? left.lastDiscoveredAt)
-    )
-    .slice(0, 6)
+  const { online, uniqueModels, results, successes, successRate, fastest, recentServers } =
+    useMemo(() => {
+      const online = snapshot.servers.filter((server) => server.status === 'online').length
+      const uniqueModels = new Set(
+        snapshot.servers.flatMap((server) =>
+          server.models.filter((model) => model.installed).map((model) => model.name)
+        )
+      ).size
+      const results = snapshot.servers.flatMap((server) =>
+        server.models.flatMap((model) => model.benchmarks)
+      )
+      const successes = results.filter((result) => result.status === 'success')
+      const successRate =
+        results.length === 0 ? 0 : (successes.length / results.length) * 100
+      const fastest = Math.max(
+        0,
+        ...snapshot.servers.map((server) => bestServerSpeed(server) ?? 0)
+      )
+      const recentServers = [...snapshot.servers]
+        .sort(
+          (left, right) =>
+            Date.parse(right.lastOnlineAt ?? right.lastDiscoveredAt) -
+            Date.parse(left.lastOnlineAt ?? left.lastDiscoveredAt)
+        )
+        .slice(0, 6)
+      return { online, uniqueModels, results, successes, successRate, fastest, recentServers }
+    }, [snapshot.servers])
 
   if (snapshot.servers.length === 0) {
     return (
