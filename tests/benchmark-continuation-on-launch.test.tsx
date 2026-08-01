@@ -5,10 +5,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProfilerJob, ProfilerSnapshot } from '@shared/types.js'
 import { DEFAULT_SETTINGS } from '@shared/defaults.js'
-import { confirmBenchmarkContinuation } from '@shared/job-utils.js'
+import { decideBenchmarkContinuation } from '@shared/job-utils.js'
 import { useBenchmarkContinuationOnLaunch } from '@renderer/hooks/useBenchmarkContinuationOnLaunch.js'
 
-type BenchmarkConfirmation = Parameters<typeof confirmBenchmarkContinuation>[1]
+type BenchmarkDecisionRequest = Parameters<typeof decideBenchmarkContinuation>[1]
 
 let container: HTMLDivElement
 let root: Root
@@ -28,74 +28,100 @@ afterEach(() => {
 
 describe('benchmark continuation on launch', () => {
   it('prompts once after the initial snapshot and resumes the interrupted run', async () => {
-    const confirm = vi.fn(async () => true)
+    const requestDecision = vi.fn(async () => 'continue' as const)
     const profileAllServers = vi.fn(async () => undefined)
 
-    await renderHarness(undefined, confirm, profileAllServers)
-    expect(confirm).not.toHaveBeenCalled()
+    await renderHarness(undefined, requestDecision, profileAllServers)
+    expect(requestDecision).not.toHaveBeenCalled()
 
-    await renderHarness(snapshot([benchmarkJob('cancelled', 2, 5)]), confirm, profileAllServers)
-    expect(confirm).toHaveBeenCalledTimes(1)
+    await renderHarness(
+      snapshot([benchmarkJob('cancelled', 2, 5)]),
+      requestDecision,
+      profileAllServers
+    )
+    expect(requestDecision).toHaveBeenCalledTimes(1)
     expect(profileAllServers).toHaveBeenCalledWith(true)
 
-    await renderHarness(snapshot([benchmarkJob('cancelled', 3, 5)]), confirm, profileAllServers)
-    expect(confirm).toHaveBeenCalledTimes(1)
+    await renderHarness(
+      snapshot([benchmarkJob('cancelled', 3, 5)]),
+      requestDecision,
+      profileAllServers
+    )
+    expect(requestDecision).toHaveBeenCalledTimes(1)
     expect(profileAllServers).toHaveBeenCalledTimes(1)
   })
 
   it('does nothing when the latest benchmark finished', async () => {
-    const confirm = vi.fn(async () => false)
+    const requestDecision = vi.fn(async () => 'start-over' as const)
     const profileAllServers = vi.fn(async () => undefined)
 
     await renderHarness(
       snapshot([benchmarkJob('completed', 5, 5)]),
-      confirm,
+      requestDecision,
       profileAllServers
     )
 
-    expect(confirm).not.toHaveBeenCalled()
+    expect(requestDecision).not.toHaveBeenCalled()
     expect(profileAllServers).not.toHaveBeenCalled()
   })
 
   it('starts a fresh benchmark when Start over is selected', async () => {
-    const confirm = vi.fn(async () => false)
+    const requestDecision = vi.fn(async () => 'start-over' as const)
     const profileAllServers = vi.fn(async () => undefined)
 
     await renderHarness(
       snapshot([benchmarkJob('failed', 2, 5)]),
-      confirm,
+      requestDecision,
       profileAllServers
     )
 
-    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(requestDecision).toHaveBeenCalledTimes(1)
     expect(profileAllServers).toHaveBeenCalledWith(false)
+  })
+
+  it('does not request benchmark recovery when Cancel is selected', async () => {
+    const requestDecision = vi.fn(async () => 'cancel' as const)
+    const profileAllServers = vi.fn(async () => undefined)
+
+    await renderHarness(
+      snapshot([benchmarkJob('cancelled', 2, 5)]),
+      requestDecision,
+      profileAllServers
+    )
+
+    expect(requestDecision).toHaveBeenCalledTimes(1)
+    expect(profileAllServers).not.toHaveBeenCalled()
   })
 })
 
 function Harness({
   currentSnapshot,
-  confirm,
+  requestDecision,
   profileAllServers
 }: Readonly<{
   currentSnapshot: ProfilerSnapshot | undefined
-  confirm: BenchmarkConfirmation
+  requestDecision: BenchmarkDecisionRequest
   profileAllServers: (resumeIncomplete?: boolean) => Promise<void>
 }>): React.JSX.Element {
-  useBenchmarkContinuationOnLaunch(currentSnapshot, confirm, profileAllServers)
+  useBenchmarkContinuationOnLaunch(
+    currentSnapshot,
+    requestDecision,
+    profileAllServers
+  )
   return <div />
 }
 
 async function renderHarness(
   currentSnapshot: ProfilerSnapshot | undefined,
-  confirm: BenchmarkConfirmation,
+  requestDecision: BenchmarkDecisionRequest,
   profileAllServers: (resumeIncomplete?: boolean) => Promise<void>
 ): Promise<void> {
   await act(async () => {
     root.render(
       <Harness
-        confirm={confirm}
         currentSnapshot={currentSnapshot}
         profileAllServers={profileAllServers}
+        requestDecision={requestDecision}
       />
     )
   })

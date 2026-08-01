@@ -381,6 +381,15 @@ code,
   line-height: 1.6;
 }
 
+.benchmark-continuation-dialog {
+  width: min(500px, calc(100vw - 48px));
+}
+
+.update-dialog > .benchmark-continuation-note {
+  margin-top: 14px;
+  color: var(--text-soft);
+}
+
 .update-release-notes {
   margin-top: 20px;
   padding: 16px;

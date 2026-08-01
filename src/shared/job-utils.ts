@@ -15,22 +15,15 @@ export function benchmarkContinuationPrompt(job: ProfilerJob): string {
   return `The last benchmark stopped after ${job.completed} of ${job.total} servers. Continue where it left off?`
 }
 
-export const BENCHMARK_CONTINUATION_DIALOG = {
-  title: 'Unfinished benchmark',
-  kind: 'warning' as const,
-  okLabel: 'Continue',
-  cancelLabel: 'Start over'
-}
+export type BenchmarkContinuationDecision =
+  | 'continue'
+  | 'start-over'
+  | 'cancel'
 
-export async function confirmBenchmarkContinuation(
+export async function decideBenchmarkContinuation(
   jobs: readonly ProfilerJob[],
-  confirm: (
-    message: string,
-    options: typeof BENCHMARK_CONTINUATION_DIALOG
-  ) => Promise<boolean>
-): Promise<boolean> {
+  requestDecision: (job: ProfilerJob) => Promise<BenchmarkContinuationDecision>
+): Promise<BenchmarkContinuationDecision> {
   const incomplete = latestIncompleteBenchmark(jobs)
-  return incomplete
-    ? confirm(benchmarkContinuationPrompt(incomplete), BENCHMARK_CONTINUATION_DIALOG)
-    : false
+  return incomplete ? requestDecision(incomplete) : 'start-over'
 }
