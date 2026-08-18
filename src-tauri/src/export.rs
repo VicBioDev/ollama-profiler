@@ -212,10 +212,7 @@ mod tests {
         assert_eq!(
             payload["accounts"][0]["credentials"]["model_mapping"],
             Value::Object(Map::from_iter([
-                (
-                    "llama3.1:8b".into(),
-                    Value::String("llama3.1:8b".into())
-                ),
+                ("llama3.1:8b".into(), Value::String("llama3.1:8b".into())),
                 ("qwen3:32b".into(), Value::String("qwen3:32b".into())),
             ]))
         );
