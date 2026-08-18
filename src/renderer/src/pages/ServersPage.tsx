@@ -14,6 +14,7 @@ import {
   useState
 } from 'react'
 import type {
+  ServerExportFormat,
   ServerExportOptions,
   ServerExportResult,
   ServerRecord,
@@ -176,16 +177,21 @@ export function ServersPage({
     )
   }
 
-  const exportSelected = async (): Promise<void> => {
+  const exportSelected = async (
+    format: ServerExportFormat = 'csv'
+  ): Promise<void> => {
     const serverIds = [...selectedIds]
     if (serverIds.length === 0) return
     const result = await onExportServers({
       serverIds,
-      modelName: selectedModelName
+      modelName: format === 'csv' ? selectedModelName : undefined,
+      ...(format === 'sub2api' ? { format } : {})
     })
     if (!result) return
     setNotice(
-      `Exported ${result.count} server${result.count === 1 ? '' : 's'} to CSV.`
+      format === 'sub2api'
+        ? `Exported ${result.count} server${result.count === 1 ? '' : 's'} to Sub2API JSON.`
+        : `Exported ${result.count} server${result.count === 1 ? '' : 's'} to CSV.`
     )
   }
 
@@ -331,6 +337,17 @@ export function ServersPage({
               >
                 <Download size={13} />
                 Export CSV
+              </button>
+              <button
+                className="button secondary compact"
+                disabled={busy}
+                onClick={() =>
+                  void exportSelected('sub2api').catch(() => undefined)
+                }
+                type="button"
+              >
+                <Download size={13} />
+                Export Sub2API
               </button>
               <button
                 className="button danger compact"

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { ServerRecord } from '@shared/types.js'
 import {
   createServerExportCsv,
-  createServerExportFileName
+  createServerExportFileName,
+  createSub2ApiExportJson
 } from '@shared/server-export.js'
 
 const server: ServerRecord = {
@@ -92,5 +93,117 @@ describe('server CSV export', () => {
     expect(createServerExportFileName(undefined, date)).toBe(
       'Ollama Profiler - 2026-07-26.csv'
     )
+    expect(createServerExportFileName(undefined, date, 'sub2api')).toBe(
+      'Ollama Profiler - Sub2API - 2026-07-26.json'
+    )
+  })
+})
+
+describe('server Sub2API JSON export', () => {
+  it('maps each selected server to an OpenAI API Key account', () => {
+    const json = createSub2ApiExportJson(
+      [server],
+      new Date('2026-08-18T09:28:01.000Z')
+    )
+    const payload = JSON.parse(json) as {
+      exported_at: string
+      proxies: unknown[]
+      accounts: Array<{
+        name: string
+        platform: string
+        type: string
+        credentials: {
+          api_key: string
+          base_url: string
+          model_mapping: Record<string, string>
+        }
+        extra: {
+          openai_apikey_responses_websockets_v2_enabled: boolean
+          openai_apikey_responses_websockets_v2_mode: string
+          openai_long_context_billing_enabled: boolean
+        }
+        concurrency: number
+        priority: number
+        rate_multiplier: number
+        auto_pause_on_expired: boolean
+      }>
+    }
+
+    expect(payload).toEqual({
+      exported_at: '2026-08-18T09:28:01Z',
+      proxies: [],
+      accounts: [
+        {
+          name: 'http://192.168.17.20:11434',
+          platform: 'openai',
+          type: 'apikey',
+          credentials: {
+            api_key: 'http://192.168.17.20:11434',
+            base_url: 'http://192.168.17.20:11434/',
+            model_mapping: {
+              'llama3.1:8b': 'llama3.1:8b',
+              'qwen3:32b': 'qwen3:32b'
+            }
+          },
+          extra: {
+            openai_apikey_responses_websockets_v2_enabled: false,
+            openai_apikey_responses_websockets_v2_mode: 'off',
+            openai_long_context_billing_enabled: false
+          },
+          concurrency: 1,
+          priority: 1,
+          rate_multiplier: 1,
+          auto_pause_on_expired: true
+        }
+      ]
+    })
+  })
+
+  it('omits cloud-tagged models and keeps only installed local models', () => {
+    const json = createSub2ApiExportJson([
+      {
+        ...server,
+        endpoint: 'http://89.169.110.227:11434/',
+        models: [
+          {
+            ...server.models[0]!,
+            id: 'local-qwen',
+            name: 'qwen3.6:27b'
+          },
+          {
+            ...server.models[0]!,
+            id: 'cloud-kimi',
+            name: 'kimi-k2.7-code:cloud'
+          },
+          {
+            ...server.models[0]!,
+            id: 'uninstalled',
+            name: 'removed:latest',
+            installed: false
+          }
+        ]
+      }
+    ])
+    const payload = JSON.parse(json) as {
+      accounts: Array<{
+        name: string
+        credentials: {
+          api_key: string
+          base_url: string
+          model_mapping: Record<string, string>
+        }
+      }>
+    }
+
+    expect(payload.accounts[0]?.name).toBe('http://89.169.110.227:11434')
+    expect(payload.accounts[0]?.credentials.api_key).toBe(
+      'http://89.169.110.227:11434'
+    )
+    expect(payload.accounts[0]?.credentials.base_url).toBe(
+      'http://89.169.110.227:11434/'
+    )
+    expect(payload.accounts[0]?.credentials.model_mapping).toEqual({
+      'qwen3.6:27b': 'qwen3.6:27b'
+    })
   })
 })

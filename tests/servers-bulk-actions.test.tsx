@@ -166,6 +166,48 @@ describe('server bulk actions', () => {
     expect(exported?.serverIds).toHaveLength(51)
     expect(exported?.modelName).toBeUndefined()
   })
+
+  it('exports the current selection as Sub2API JSON', async () => {
+    let exported: ServerExportOptions | undefined
+    act(() => {
+      root.render(
+        <ServersPage
+          busy={false}
+          onDeleteServers={async () => undefined}
+          onExportServers={async (options) => {
+            exported = options
+            return { filePath: 'servers.json', count: options.serverIds.length }
+          }}
+          onNavigateToImport={() => undefined}
+          onSelectServer={() => undefined}
+          servers={[
+            server('server-qwen', 'qwen3:32b'),
+            server('server-llama', 'llama3.1:8b')
+          ]}
+        />
+      )
+    })
+
+    const rowSelections = [
+      ...container.querySelectorAll<HTMLInputElement>(
+        'tbody input[type="checkbox"]'
+      )
+    ]
+    act(() => {
+      rowSelections[0]?.click()
+      rowSelections[1]?.click()
+    })
+
+    await act(async () => findButton('Export Sub2API').click())
+
+    expect(exported).toEqual({
+      serverIds: ['server-qwen', 'server-llama'],
+      format: 'sub2api'
+    })
+    expect(container.textContent).toContain(
+      'Exported 2 servers to Sub2API JSON.'
+    )
+  })
 })
 
 function server(id: string, modelName: string): ServerRecord {

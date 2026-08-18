@@ -386,12 +386,22 @@ pub struct ImportCommitResult {
     pub updated: usize,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ServerExportFormat {
+    #[default]
+    Csv,
+    Sub2api,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerExportOptions {
     pub server_ids: Vec<String>,
     #[serde(default)]
     pub model_name: Option<String>,
+    #[serde(default)]
+    pub format: ServerExportFormat,
 }
 
 #[derive(Clone, Debug, Serialize)]
