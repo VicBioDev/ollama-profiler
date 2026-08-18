@@ -145,9 +145,12 @@ export interface ImportCommitOptions {
   benchmarkApproved: boolean
 }
 
+export type ServerExportFormat = 'csv' | 'sub2api'
+
 export interface ServerExportOptions {
   serverIds: string[]
   modelName?: string
+  format?: ServerExportFormat
 }
 
 export interface ServerExportResult {

@@ -64,9 +64,13 @@ with no Docker, database service, or background web service required.
   Chat keeps the current test when navigating between pages while the app remains
   open, but never writes prompts or replies to disk and clears them on exit
 - Select servers individually or select all current filtered results, then
-  delete them in bulk or export CSV; exports include Endpoint, city/country
-  Region, and TPS, using the selected model's speed when an exact model is
-  filtered or each server's highest speed otherwise
+  delete them in bulk or open the Export menu to choose a format. CSV exports
+  include Endpoint, city/country Region, and TPS, using the selected model's
+  speed when an exact model is filtered or each server's highest speed
+  otherwise. Sub2API JSON maps each selected server to an OpenAI API Key
+  account whose name and API key are the server endpoint, whose Base URL is
+  that endpoint plus `/`, and whose model list includes every installed local
+  model except Cloud tags such as `:cloud`
 - Copy a server endpoint through the native system clipboard from any server
   list or its detail page, with visible success or failure feedback.
   Hover or focus a list's model count to inspect every installed model name, or
@@ -74,8 +78,9 @@ with no Docker, database service, or background web service required.
 - Paginate the server list at 50 servers per page while preserving selection
   across pages; Select All covers the complete filtered result set, not only the
   current page
-- Name exports `Ollama Profiler - Model Name - YYYY-MM-DD.csv` by default,
-  omitting the model name when no exact model is selected
+- Name CSV exports `Ollama Profiler - Model Name - YYYY-MM-DD.csv` by default,
+  omitting the model name when no exact model is selected. Sub2API exports use
+  `Ollama Profiler - Sub2API - YYYY-MM-DD.json`
 - Clearly label and skip Ollama Cloud models such as `:cloud` and `*-cloud`,
   benchmarking only generation models that run locally on the target server
 - Refresh healthy inventory every hour with at most 16 background workers;

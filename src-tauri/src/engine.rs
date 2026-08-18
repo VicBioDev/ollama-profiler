@@ -1,5 +1,5 @@
 use crate::error::{AppError, AppResult};
-use crate::export::create_server_export_csv;
+use crate::export::{create_server_export_csv, create_sub2api_export_json};
 use crate::importers::parse_discovery_bytes;
 use crate::lan::{
     DiscoveredOllamaEndpoint, LanScanPlan, create_lan_scan_plan, discover_lan_ollama,
@@ -520,10 +520,11 @@ impl ProfilerEngine {
         if servers.is_empty() {
             return Err(AppError::message("Select at least one server to export"));
         }
-        fs::write(
-            &file_path,
-            create_server_export_csv(&servers, model_name.as_deref()),
-        )?;
+        let contents = match options.format {
+            ServerExportFormat::Sub2api => create_sub2api_export_json(&servers, Utc::now()),
+            ServerExportFormat::Csv => create_server_export_csv(&servers, model_name.as_deref()),
+        };
+        fs::write(&file_path, contents)?;
         Ok(ServerExportResult {
             file_path,
             count: servers.len(),

@@ -62,8 +62,7 @@ describe('server bulk actions', () => {
     expect(container.textContent).toContain('1 selected')
     expect(container.textContent).toContain('Export TPS for qwen3:32b')
 
-    const exportButton = findButton('Export CSV')
-    await act(async () => exportButton.click())
+    await chooseExportFormat('CSV')
 
     expect(exported).toEqual({
       serverIds: ['server-qwen'],
@@ -162,9 +161,93 @@ describe('server bulk actions', () => {
     expect(container.textContent).toContain('51–51 of 51')
     expect(container.textContent).toContain('Page 2 of 2')
 
-    await act(async () => findButton('Export CSV').click())
+    await chooseExportFormat('CSV')
     expect(exported?.serverIds).toHaveLength(51)
     expect(exported?.modelName).toBeUndefined()
+  })
+
+  it('opens an export format menu for the current selection', async () => {
+    act(() => {
+      root.render(
+        <ServersPage
+          busy={false}
+          onDeleteServers={async () => undefined}
+          onExportServers={async () => null}
+          onNavigateToImport={() => undefined}
+          onSelectServer={() => undefined}
+          servers={[server('server-qwen', 'qwen3:32b')]}
+        />
+      )
+    })
+
+    act(() =>
+      container
+        .querySelector<HTMLInputElement>('tbody input[type="checkbox"]')
+        ?.click()
+    )
+
+    expect(container.querySelector('[role="menu"]')).toBeNull()
+
+    act(() => findButton('Export').click())
+
+    const menuItems = [...container.querySelectorAll('[role="menuitem"]')].map(
+      (item) => ({
+        label: item.querySelector('span')?.textContent,
+        description: item.querySelector('small')?.textContent
+      })
+    )
+    expect(menuItems).toEqual([
+      {
+        label: 'CSV',
+        description: 'Endpoint, region, and TPS'
+      },
+      {
+        label: 'Sub2API JSON',
+        description: 'OpenAI API Key accounts for Sub2API'
+      }
+    ])
+  })
+
+  it('exports the current selection as Sub2API JSON', async () => {
+    let exported: ServerExportOptions | undefined
+    act(() => {
+      root.render(
+        <ServersPage
+          busy={false}
+          onDeleteServers={async () => undefined}
+          onExportServers={async (options) => {
+            exported = options
+            return { filePath: 'servers.json', count: options.serverIds.length }
+          }}
+          onNavigateToImport={() => undefined}
+          onSelectServer={() => undefined}
+          servers={[
+            server('server-qwen', 'qwen3:32b'),
+            server('server-llama', 'llama3.1:8b')
+          ]}
+        />
+      )
+    })
+
+    const rowSelections = [
+      ...container.querySelectorAll<HTMLInputElement>(
+        'tbody input[type="checkbox"]'
+      )
+    ]
+    act(() => {
+      rowSelections[0]?.click()
+      rowSelections[1]?.click()
+    })
+
+    await chooseExportFormat('Sub2API JSON')
+
+    expect(exported).toEqual({
+      serverIds: ['server-qwen', 'server-llama'],
+      format: 'sub2api'
+    })
+    expect(container.textContent).toContain(
+      'Exported 2 servers to Sub2API JSON.'
+    )
   })
 })
 
@@ -193,6 +276,19 @@ function server(id: string, modelName: string): ServerRecord {
       }
     ]
   }
+}
+
+async function chooseExportFormat(label: string): Promise<void> {
+  act(() => findButton('Export').click())
+  await act(async () => findMenuItem(label).click())
+}
+
+function findMenuItem(label: string): HTMLButtonElement {
+  const item = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (candidate) => candidate.textContent?.includes(label)
+  )
+  if (!item) throw new Error(`${label} export format was not rendered`)
+  return item
 }
 
 function findButton(label: string): HTMLButtonElement {

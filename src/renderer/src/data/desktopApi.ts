@@ -60,10 +60,21 @@ export function createDesktopApi(): DesktopApi {
     exportServers: async (
       options: ServerExportOptions
     ): Promise<ServerExportResult | null> => {
+      const format = options.format ?? 'csv'
       const filePath = await save({
-        title: 'Export selected Ollama servers',
-        defaultPath: createServerExportFileName(options.modelName),
-        filters: [{ name: 'CSV file', extensions: ['csv'] }]
+        title:
+          format === 'sub2api'
+            ? 'Export selected servers for Sub2API'
+            : 'Export selected Ollama servers',
+        defaultPath: createServerExportFileName(
+          options.modelName,
+          undefined,
+          format
+        ),
+        filters:
+          format === 'sub2api'
+            ? [{ name: 'Sub2API JSON', extensions: ['json'] }]
+            : [{ name: 'CSV file', extensions: ['csv'] }]
       })
       return filePath
         ? invoke<ServerExportResult>('export_servers', { options, filePath })

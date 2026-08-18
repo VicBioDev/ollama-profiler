@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -11,9 +12,12 @@ import {
   type SetStateAction,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
+import { SERVER_EXPORT_FORMATS } from '@shared/server-export'
 import type {
+  ServerExportFormat,
   ServerExportOptions,
   ServerExportResult,
   ServerRecord,
@@ -83,7 +87,9 @@ export function ServersPage({
   const { modelQuery, status, region, page } = activeSearchState
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [notice, setNotice] = useState<string>()
+  const exportMenuRef = useRef<HTMLDivElement>(null)
 
   const modelCatalog = useMemo(() => buildModelCatalog(servers), [servers])
 
@@ -142,6 +148,16 @@ export function ServersPage({
     })
   }, [filteredIdKey])
 
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    const closeMenu = (event: MouseEvent): void => {
+      if (exportMenuRef.current?.contains(event.target as Node)) return
+      setExportMenuOpen(false)
+    }
+    document.addEventListener('mousedown', closeMenu)
+    return () => document.removeEventListener('mousedown', closeMenu)
+  }, [exportMenuOpen])
+
   const toggleServer = (serverId: string, selected: boolean): void => {
     setNotice(undefined)
     setSelectedIds((current) => {
@@ -176,16 +192,21 @@ export function ServersPage({
     )
   }
 
-  const exportSelected = async (): Promise<void> => {
+  const exportSelected = async (
+    format: ServerExportFormat = 'csv'
+  ): Promise<void> => {
     const serverIds = [...selectedIds]
     if (serverIds.length === 0) return
+    const option = SERVER_EXPORT_FORMATS.find((item) => item.format === format)
     const result = await onExportServers({
       serverIds,
-      modelName: selectedModelName
+      modelName: format === 'csv' ? selectedModelName : undefined,
+      ...(format === 'csv' ? {} : { format })
     })
     if (!result) return
+    const formatLabel = option?.label ?? 'CSV'
     setNotice(
-      `Exported ${result.count} server${result.count === 1 ? '' : 's'} to CSV.`
+      `Exported ${result.count} server${result.count === 1 ? '' : 's'} to ${formatLabel}.`
     )
   }
 
@@ -317,21 +338,47 @@ export function ServersPage({
               <button
                 className="button ghost compact"
                 disabled={busy}
-                onClick={() => setSelectedIds(new Set())}
+                onClick={() => {
+                  setExportMenuOpen(false)
+                  setSelectedIds(new Set())
+                }}
                 type="button"
               >
                 <X size={13} />
                 Clear
               </button>
-              <button
-                className="button secondary compact"
-                disabled={busy}
-                onClick={() => void exportSelected().catch(() => undefined)}
-                type="button"
-              >
-                <Download size={13} />
-                Export CSV
-              </button>
+              <div className="export-menu" ref={exportMenuRef}>
+                <button
+                  aria-expanded={exportMenuOpen}
+                  aria-haspopup="menu"
+                  className="button secondary compact"
+                  disabled={busy}
+                  onClick={() => setExportMenuOpen((open) => !open)}
+                  type="button"
+                >
+                  <Download size={13} />
+                  Export
+                  <ChevronDown size={12} />
+                </button>
+                {exportMenuOpen ? (
+                  <div className="export-menu-list" role="menu">
+                    {SERVER_EXPORT_FORMATS.map((option) => (
+                      <button
+                        key={option.format}
+                        onClick={() => {
+                          setExportMenuOpen(false)
+                          void exportSelected(option.format).catch(() => undefined)
+                        }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        <span>{option.label}</span>
+                        <small>{option.description}</small>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <button
                 className="button danger compact"
                 disabled={busy}
