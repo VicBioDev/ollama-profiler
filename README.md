@@ -64,13 +64,13 @@ with no Docker, database service, or background web service required.
   Chat keeps the current test when navigating between pages while the app remains
   open, but never writes prompts or replies to disk and clears them on exit
 - Select servers individually or select all current filtered results, then
-  delete them in bulk, export CSV, or export Sub2API JSON. CSV exports include
-  Endpoint, city/country Region, and TPS, using the selected model's speed when
-  an exact model is filtered or each server's highest speed otherwise. Sub2API
-  JSON maps each selected server to an OpenAI API Key account whose name and
-  API key are the server endpoint, whose Base URL is that endpoint plus `/`,
-  and whose model list includes every installed local model except Cloud tags
-  such as `:cloud`
+  delete them in bulk or open the Export menu to choose a format. CSV exports
+  include Endpoint, city/country Region, and TPS, using the selected model's
+  speed when an exact model is filtered or each server's highest speed
+  otherwise. Sub2API JSON maps each selected server to an OpenAI API Key
+  account whose name and API key are the server endpoint, whose Base URL is
+  that endpoint plus `/`, and whose model list includes every installed local
+  model except Cloud tags such as `:cloud`
 - Copy a server endpoint through the native system clipboard from any server
   list or its detail page, with visible success or failure feedback.
   Hover or focus a list's model count to inspect every installed model name, or

@@ -3,6 +3,25 @@ import type { ServerExportFormat, ServerRecord } from './types.js'
 
 const PRODUCT_NAME = 'Ollama Profiler'
 
+export interface ServerExportFormatOption {
+  readonly format: ServerExportFormat
+  readonly label: string
+  readonly description: string
+}
+
+export const SERVER_EXPORT_FORMATS: readonly ServerExportFormatOption[] = [
+  {
+    format: 'csv',
+    label: 'CSV',
+    description: 'Endpoint, region, and TPS'
+  },
+  {
+    format: 'sub2api',
+    label: 'Sub2API JSON',
+    description: 'OpenAI API Key accounts for Sub2API'
+  }
+]
+
 export function createServerExportCsv(
   servers: ServerRecord[],
   modelName?: string
